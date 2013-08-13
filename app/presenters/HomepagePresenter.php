@@ -76,6 +76,13 @@ class HomepagePresenter extends BasePresenter
 		$this->setView('default');
 	}
 
+	public function actionKillReact()
+	{
+		if (count($this->reacts)) $this->killReact(array_keys($this->reacts)[0]);
+
+		$this->setView('default');
+	}
+
 	private function startReact()
 	{
 		if (count($this->reacts) > 30) throw new Exception('Hele, neblbni.');
@@ -89,6 +96,24 @@ class HomepagePresenter extends BasePresenter
 
 		proc_close(proc_open($query, array(), $pipes, $temp, array()));
 		return array($reactName, $port);
+	}
+
+	private function killReact($reactName)
+	{
+		if (empty($this->reacts[$reactName])) return FALSE;
+		$react = $this->reacts[$reactName];
+
+		if (isset($react['pid'], $react['path']) && posix_kill($react['pid'], 9)) {
+
+			foreach (Finder::findFiles('*')->from($react['path'])->childFirst() as $path => $file) unlink($path);
+
+			rmdir($react['path']);
+			unset($this->reacts[$reactName]);
+
+			return TRUE;
+		}
+
+		return FALSE;
 	}
 
 	private function connectReact($port)
@@ -128,7 +153,6 @@ class HomepagePresenter extends BasePresenter
 
 		return array($reacts, $usedPorts);
 	}
-
 
 	private static function checkReactTemp($reactTemp)
 	{

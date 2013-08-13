@@ -22,12 +22,13 @@ require __DIR__.'/../libs/autoload.php';
 
 $i = 0;
 $app = function ($request, $response) use (&$i) {
-    $i++;
-    $text = "This is request number $i.\n";
-    $headers = array('Content-Type' => 'text/plain');
+	$i++;
+	$text = "This is request number $i.\n";
+	$headers = array('Content-Type' => 'text/plain');
 
-    $response->writeHead(200, $headers);
-    $response->end($text);
+	$response->writeHead(200, $headers);
+	$response->end($text);
+	if ($i === 10) die();
 };
 
 $loop = React\EventLoop\Factory::create();
