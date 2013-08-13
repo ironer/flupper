@@ -1,7 +1,24 @@
 <?php
-require __DIR__.'/../libs/autoload.php';
+if (count($argv) !== 6) die(1);
 
-echo getmypid();
+$options = array(
+	'script' => $argv[0],
+	'name' => $argv[1],
+	'configFile' => "$argv[3]/$argv[4]" ,
+	'clientsFile' => "$argv[3]/$argv[5]",
+	'config' => array(
+		'pid' => getmypid(),
+		'port' => $argv[2],
+		'error' => 0,
+		'status' => "REACT_STARTING",
+		'clients' => 0
+	)
+);
+
+umask();
+file_put_contents($options['configFile'], json_encode($options['config']));
+
+require __DIR__.'/../libs/autoload.php';
 
 $i = 0;
 $app = function ($request, $response) use (&$i) {
@@ -19,5 +36,5 @@ $http = new React\Http\Server($socket);
 
 $http->on('request', $app);
 
-$socket->listen(1337);
+$socket->listen($options['config']['port']);
 $loop->run();

@@ -12,7 +12,7 @@ class HomepagePresenter extends BasePresenter
 {
 	const REACT_CONFIG = 'config.json', // default filename for storing react configuration
 		REACT_CLIENTS = 'clients.json', // default filename for storing react clients
-		REACT_LOG = 'log.txt'; // default filename for redirecting react's output
+		REACT_LOG = 'stdout.txt'; // default filename for redirecting react's output
 
 
 	/** @var string path to react server php script */
@@ -22,10 +22,10 @@ class HomepagePresenter extends BasePresenter
 	private $tempDir = '';
 
 	/** @var array (reactServerName => ['path', 'pid', 'port', 'error', 'status', 'clients']) of currently runing reacts */
-	private $reacts = [];
+	private $reacts = array();
 
 	/** @var array (port => reactServerName) used ports of running reacts */
-	private $usedPorts = [];
+	private $usedPorts = array();
 
 	/** @var string default name for react */
 	private $reactName = '';
@@ -65,34 +65,39 @@ class HomepagePresenter extends BasePresenter
 
 		if ($socket === FALSE) echo 'Neco se posralo!<br>';
 		else echo 'Pripojeni na react se povedlo ;-)<br>';
+
+		$this->setView('default');
 	}
 
 	private function startReact()
 	{
 		if (count($this->reacts) > 30) throw new Exception('Hele, neblbni.');
-		for ($i = 1; isset($this->reacts[$reactName = $this->reactName . str_pad($i, 3, '0', STR_PAD_LEFT)]); ) ++$i;
+		for ($timeout = 1; isset($this->reacts[$reactName = $this->reactName . str_pad($timeout, 3, '0', STR_PAD_LEFT)]); ) ++$timeout;
 		while (in_array($port = rand(1300, 1400), $this->usedPorts)) {}
 
-		mkdir("$this->tempDir/$reactName", 0777);
+		mkdir($temp = "$this->tempDir/$reactName", 0777);
 
-		$query = "php $this->scriptDir/testServer.php > $this->tempDir/$reactName/" . self::REACT_LOG . " &";
-		proc_close(proc_open($query, [], $pipes, "$this->tempDir/$reactName", []));
-		return [$reactName, $port];
+		$query = "php $this->scriptDir/testServer.php $reactName $port $temp " . self::REACT_CONFIG . " " . self::REACT_CLIENTS
+			."> $temp/" . self::REACT_LOG . " &";
+
+		proc_close(proc_open($query, array(), $pipes, $temp, array()));
+		return array($reactName, $port);
 	}
 
 	private function connectReact($port)
 	{
-		for ($i = 0, $msTimeout = 10; $i < 10000; $i += ($msTimeout *= 1.3)) {
+		for ($timeout = 0, $step = 10; TRUE; $timeout += $step, $step *= 1.3) {
 			echo 'Pokus o pripojeni...<br>';
 
 			$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
 			socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, ['sec' => 1, 'usec' => 0]);
-			if (@socket_connect($socket, $_SERVER["HTTP_HOST"], 1337)) return $socket;
+			if (@socket_connect($socket, $_SERVER["HTTP_HOST"], $port)) return $socket;
 
 			echo socket_strerror(socket_last_error()) . '<br>';
 			socket_close($socket);
 
-			usleep(1000 * $msTimeout);
+			if ($timeout > 2000) break;
+			usleep(1000 * $step);
 		}
 
 		return FALSE;
@@ -105,19 +110,19 @@ class HomepagePresenter extends BasePresenter
 			else throw new Exception("V TEMP adresari ($parentDir) nelze vytvorit podadresar pro react servery.");
 		} elseif (!is_writable($reactTemp)) throw new Exception("Do TEMP adresare pro react servery ($reactTemp) nelze zapisovat.");
 
-		$reacts = [];
-		$usedPorts = [];
+		$reacts = array();
+		$usedPorts = array();
 
 		foreach (Finder::findDirectories('*')->in($reactTemp) as $path => $dir) {
 
 			if (!is_file($statusFile = $path . '/' . self::REACT_CONFIG)) {
-				$react = ['error' => 1, 'status' => "Nelze nalezt soubor " . self::REACT_CONFIG . " s konfiguraci reactu."];
+				$react = array('error' => 1, 'status' => "Nelze nalezt soubor " . self::REACT_CONFIG . " s konfiguraci reactu.");
 			} elseif (!is_writable($statusFile)) {
-				$react = ['error' => 2, 'status' => "Soubor " . self::REACT_CONFIG . " s konfiguraci reactu neni zapisovatelny."];
+				$react = array('error' => 2, 'status' => "Soubor " . self::REACT_CONFIG . " s konfiguraci reactu neni zapisovatelny.");
 			} else {
 				$react = json_decode(file_get_contents($statusFile), TRUE);
 				if (!is_array($react) || count($react) !== 5 || empty($react['port'])) {
-					$react = ['error' => 3, 'status' => "Nelze nacist validni konfiguraci reactu ze souboru " . self::REACT_CONFIG . "."];
+					$react = array('error' => 3, 'status' => "Nelze nacist validni konfiguraci reactu ze souboru " . self::REACT_CONFIG . ".");
 				} else $usedPorts[] = $react['port'];
 			}
 
@@ -125,6 +130,6 @@ class HomepagePresenter extends BasePresenter
 			$reacts[$dir->getFilename()] = $react;
 		}
 
-		return [$reacts, $usedPorts];
+		return array($reacts, $usedPorts);
 	}
 }
