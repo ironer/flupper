@@ -64,7 +64,14 @@ class HomepagePresenter extends BasePresenter
 		echo 'Pripojeni k reactu trvalo: ' . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
 
 		if ($socket === FALSE) echo 'Neco se posralo!<br>';
-		else echo 'Pripojeni na react se povedlo ;-)<br>';
+		else {
+			echo 'Pripojeni na react se povedlo ;-)<br>';
+
+			list($react, $port) = self::getReactConfig($reactName, $this->tempDir);
+			if ($port !== NULL) $this->usedPorts[] = $port;
+
+			$this->reacts[$reactName] = $react;
+		}
 
 		$this->setView('default');
 	}
@@ -105,31 +112,49 @@ class HomepagePresenter extends BasePresenter
 
 	private static function getReactsData($reactTemp)
 	{
-		if (!is_dir($reactTemp)) {
-			if (is_dir($parentDir = dirname($reactTemp)) && is_writable($parentDir)) mkdir($reactTemp, 0777);
-			else throw new Exception("V TEMP adresari ($parentDir) nelze vytvorit podadresar pro react servery.");
-		} elseif (!is_writable($reactTemp)) throw new Exception("Do TEMP adresare pro react servery ($reactTemp) nelze zapisovat.");
+		self::checkReactTemp($reactTemp);
 
 		$reacts = array();
 		$usedPorts = array();
 
 		foreach (Finder::findDirectories('*')->in($reactTemp) as $path => $dir) {
+			$reactName = $dir->getFilename();
 
-			if (!is_file($statusFile = $path . '/' . self::REACT_CONFIG)) {
-				$react = array('error' => 1, 'status' => "Nelze nalezt soubor " . self::REACT_CONFIG . " s konfiguraci reactu.");
-			} elseif (!is_writable($statusFile)) {
-				$react = array('error' => 2, 'status' => "Soubor " . self::REACT_CONFIG . " s konfiguraci reactu neni zapisovatelny.");
-			} else {
-				$react = json_decode(file_get_contents($statusFile), TRUE);
-				if (!is_array($react) || count($react) !== 5 || empty($react['port'])) {
-					$react = array('error' => 3, 'status' => "Nelze nacist validni konfiguraci reactu ze souboru " . self::REACT_CONFIG . ".");
-				} else $usedPorts[] = $react['port'];
-			}
+			list($react, $port) = self::getReactConfig($reactName, $reactTemp);
+			if ($port !== NULL) $usedPorts[] = $port;
 
-			$react['path'] = $path;
-			$reacts[$dir->getFilename()] = $react;
+			$reacts[$reactName] = $react;
 		}
 
 		return array($reacts, $usedPorts);
+	}
+
+
+	private static function checkReactTemp($reactTemp)
+	{
+		if (!is_dir($reactTemp)) {
+			if (is_dir($parentDir = dirname($reactTemp)) && is_writable($parentDir)) mkdir($reactTemp, 0777);
+			else throw new Exception("V TEMP adresari ($parentDir) nelze vytvorit podadresar pro react servery.");
+		} elseif (!is_writable($reactTemp)) throw new Exception("Do TEMP adresare pro react servery ($reactTemp) nelze zapisovat.");
+	}
+
+	private static function getReactConfig($reactName, $reactTemp)
+	{
+		$port = NULL;
+
+		if (!is_file($statusFile = "$reactTemp/$reactName/" . self::REACT_CONFIG)) {
+			$react = array('error' => 1, 'status' => "Nelze nalezt soubor " . self::REACT_CONFIG . " s konfiguraci reactu.");
+		} elseif (!is_writable($statusFile)) {
+			$react = array('error' => 2, 'status' => "Soubor " . self::REACT_CONFIG . " s konfiguraci reactu neni zapisovatelny.");
+		} else {
+			$react = json_decode(file_get_contents($statusFile), TRUE);
+
+			if (!is_array($react) || count($react) !== 5 || empty($react['port'])) {
+				$react = array('error' => 3, 'status' => "Nelze nacist validni konfiguraci reactu ze souboru " . self::REACT_CONFIG . ".");
+			} else $port = $react['port'];
+		}
+		$react['path'] = "$reactTemp/$reactName";
+
+		return array($react, $port);
 	}
 }
