@@ -1,5 +1,7 @@
 <?php
 
+// $this->getSession('User/Reacts')->members[$userId] = $reactId;
+
 use Nette\Utils\Finder;
 
 
@@ -9,6 +11,7 @@ use Nette\Utils\Finder;
 class HomepagePresenter extends BasePresenter
 {
 	const REACT_CONFIG = 'config.json', // default filename for storing react configuration
+		REACT_CLIENTS = 'clients.json', // default filename for storing react clients
 		REACT_LOG = 'log.txt'; // default filename for redirecting react's output
 
 
@@ -31,13 +34,15 @@ class HomepagePresenter extends BasePresenter
 	protected function startup()
 	{
 		parent::startup();
+
 		$time = microtime(TRUE);
-		$this->scriptDir = dirname($this->context->parameters['appDir'])  . '/bin';
+
+		$this->scriptDir = dirname($this->context->parameters['appDir']) . '/bin';
 		$this->tempDir = realpath($this->context->parameters['tempDir']) . '/reacts';
 		list($this->reacts, $this->usedPorts) = self::getReactsData($this->tempDir);
-
 		$this->reactName = !empty($this->name) ? $this->name : 'Default';
-		echo 'Nacteni reactu (' . count($this->reacts) . '): ' . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms';
+
+		echo 'Nacteni reactu (' . count($this->reacts) . '): ' . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
 	}
 
 	public function renderDefault()
@@ -48,18 +53,49 @@ class HomepagePresenter extends BasePresenter
 		\Nette\Diagnostics\Debugger::dump($this->reactName);
 	}
 
-	public function actionStartReact() {
-		$this->startReact();
+	public function actionStartReact()
+	{
+		list($reactName, $port) = $this->startReact();
+
+		$time = microtime(TRUE);
+
+		$socket = $this->connectReact($port);
+
+		echo 'Pripojeni k reactu trvalo: ' . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
+
+		if ($socket === FALSE) echo 'Neco se posralo!<br>';
+		else echo 'Pripojeni na react se povedlo ;-)<br>';
 	}
 
 	private function startReact()
 	{
-		if (count($this->reacts) > 10) throw new Exception('Hele, neblbni.');
+		if (count($this->reacts) > 30) throw new Exception('Hele, neblbni.');
 		for ($i = 1; isset($this->reacts[$reactName = $this->reactName . str_pad($i, 3, '0', STR_PAD_LEFT)]); ) ++$i;
 		while (in_array($port = rand(1300, 1400), $this->usedPorts)) {}
 
-		$query = "php $this->scriptDir/testServer.php > $this->tempDir/" . self::REACT_LOG . " &"; // $this->tempDir/$reactName/
-		proc_close(proc_open($query, [], $pipes, '/tmp', []));
+		mkdir("$this->tempDir/$reactName", 0777);
+
+		$query = "php $this->scriptDir/testServer.php > $this->tempDir/$reactName/" . self::REACT_LOG . " &";
+		proc_close(proc_open($query, [], $pipes, "$this->tempDir/$reactName", []));
+		return [$reactName, $port];
+	}
+
+	private function connectReact($port)
+	{
+		for ($i = 0, $msTimeout = 10; $i < 10000; $i += ($msTimeout *= 1.3)) {
+			echo 'Pokus o pripojeni...<br>';
+
+			$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+			socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, ['sec' => 1, 'usec' => 0]);
+			if (@socket_connect($socket, $_SERVER["HTTP_HOST"], 1337)) return $socket;
+
+			echo socket_strerror(socket_last_error()) . '<br>';
+			socket_close($socket);
+
+			usleep(1000 * $msTimeout);
+		}
+
+		return FALSE;
 	}
 
 	private static function getReactsData($reactTemp)
