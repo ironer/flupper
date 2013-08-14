@@ -78,8 +78,10 @@ class HomepagePresenter extends BasePresenter
 
 	public function actionKillReact()
 	{
-		if (count($this->reacts)) $this->killReact(array_keys($this->reacts)[0]);
-
+		if (!count($this->reacts)) echo "Vsechny reacty jsou vypnute<br>";
+		else if ($this->killReact($reactName = array_keys($this->reacts)[0])) echo "Byl vypnut react $reactName<br>";
+		else echo "Vypnuti reactu $reactName selhalo<br>";
+		
 		$this->setView('default');
 	}
 
@@ -103,7 +105,7 @@ class HomepagePresenter extends BasePresenter
 		if (empty($this->reacts[$reactName])) return FALSE;
 		$react = $this->reacts[$reactName];
 
-		if (isset($react['pid'], $react['path']) && posix_kill($react['pid'], 9)) {
+		if (isset($react['pid'], $react['path']) && posix_kill($react['pid'], 15)) {
 
 			foreach (Finder::findFiles('*')->from($react['path'])->childFirst() as $path => $file) unlink($path);
 
