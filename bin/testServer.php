@@ -36,11 +36,18 @@ $loop = React\EventLoop\Factory::create();
 $socket = new React\Socket\Server($loop);
 //$http = new React\Http\Server($socket);
 
-//$http->on('request', $app);
+$socket->on('connection', function ($conn) use (&$options) {
+	$conn->write($options['name']);
 
-$socket->on('connection', function ($conn) {
-	$conn->pipe($conn);
+	$conn->on('data', function ($data) use ($conn, &$options) {
+		echo "$data\n";
+
+//		$conn->close();
+	});
 });
+
+
+//$http->on('request', $app);
 
 $socket->listen($options['config']['port']);
 $loop->run();
