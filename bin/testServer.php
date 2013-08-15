@@ -1,53 +1,79 @@
 <?php
-if (count($argv) !== 7) die(1);
 
-$options = array(
-	'script' => $argv[0],
-	'name' => $argv[1],
-	'rootPwd' => $argv[6],
-	'configFile' => "$argv[3]/$argv[4]" ,
-	'clientsFile' => "$argv[3]/$argv[5]",
-	'config' => array(
-		'pid' => getmypid(),
-		'port' => intval($argv[2]),
-		'error' => 0,
-		'status' => "EXPECTING_ROOT_INIT",
-		'clientCnt' => 0
-	)
-);
+$container = require_once __DIR__ . '/../app/bootstrap.php';
+/** @var \Nette\DI\Container $container */
 
-umask();
-file_put_contents($options['configFile'], json_encode($options['config']));
+\Nette\Diagnostics\Debugger::$productionMode = FALSE;
+$container->getByType('Nette\Http\IResponse')->setContentType('text/plain');
 
-require __DIR__.'/../libs/autoload.php';
+class BoardServer extends Nette\Object
+{
 
-$i = 0;
-$app = function ($request, $response) use (&$i) {
-	$i++;
-	$text = "This is request number $i.\n";
-	$headers = array('Content-Type' => 'text/plain');
+	private $options;
 
-	$response->writeHead(200, $headers);
-	$response->end($text);
-	if ($i === 10) die();
-};
+	/** @var Nette\DI\Container */
+	private $container;
 
-$loop = React\EventLoop\Factory::create();
-$socket = new React\Socket\Server($loop);
-//$http = new React\Http\Server($socket);
 
-$socket->on('connection', function ($conn) use (&$options) {
-	$conn->write($options['name']);
+	public function __construct(\Nette\DI\Container $container, $argv)
+	{
+		if (count($argv) !== 7) {
+			throw new LogicException("Invalid number of arguments, expected 7");
+		}
 
-	$conn->on('data', function ($data) use ($conn, &$options) {
+		$this->options = array(
+			'script' => $argv[0],
+			'name' => $argv[1],
+			'rootPwd' => $argv[6],
+			'configFile' => "$argv[3]/$argv[4]",
+			'clientsFile' => "$argv[3]/$argv[5]",
+			'config' => array(
+				'pid' => getmypid(),
+				'port' => intval($argv[2]),
+				'error' => 0,
+				'status' => "EXPECTING_ROOT_INIT",
+				'clientCnt' => 0
+			)
+		);
+
+		umask();
+		file_put_contents($this->options['configFile'], json_encode($this->options['config']));
+		$this->container = $container;
+	}
+
+
+	public function start()
+	{
+		$loop = React\EventLoop\Factory::create();
+		$socket = new React\Socket\Server($loop);
+		//$http = new React\Http\Server($socket);
+
+		$socket->on('connection', $this->onConnection);
+
+		//$http->on('request', $app);
+
+		$socket->listen($this->options['config']['port']);
+		$loop->run();
+	}
+
+
+	public function onConnection(\React\Socket\Connection $conn)
+	{
+		$conn->write($this->options['name']);
+
+		$conn->on('data', function ($data) use ($conn) {
+			$this->onConnectionData($conn, $data);
+		});
+	}
+
+
+	public function onConnectionData(\React\Socket\Connection $conn, $data)
+	{
 		echo "$data\n";
+		//  $conn->close();
+	}
+}
 
-//		$conn->close();
-	});
-});
 
-
-//$http->on('request', $app);
-
-$socket->listen($options['config']['port']);
-$loop->run();
+$server = new BoardServer($container, $argv);
+$server->start();

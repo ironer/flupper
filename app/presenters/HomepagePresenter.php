@@ -156,7 +156,7 @@ class HomepagePresenter extends BasePresenter
 	{
 		echo "Inicializace reactu $reactName<br>";
 
-		return FALSE;
+		return $this->greetReact($reactName, $socket);
 	}
 
 	private function greetReact($reactName, $socket)
@@ -166,9 +166,13 @@ class HomepagePresenter extends BasePresenter
 		if ($error !== 0) echo "Chyba pri cteni pozdravu reactu: $error<br>";
 		elseif ($response === $reactName) {
 			echo "$reactName korektne zdravi => ";
-//
-//			$this->sendData($socket, $this->rootPwd);
-//			echo "Odesilam root heslo => ";
+
+			if ($this->sendData($socket, $this->rootPwd) === strlen($this->rootPwd)) echo "Odeslano root heslo => ";
+			else {
+				echo 'Selhalo odeslani root hesla<br>';
+				return FALSE;
+			}
+
 //			if ()
 //			socket_write($socket, $this->rootPwd, strlen($this->rootPwd));
 //			echo "React odpovida: " . $buf . "<br>";
