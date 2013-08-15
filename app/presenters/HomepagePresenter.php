@@ -30,6 +30,9 @@ class HomepagePresenter extends BasePresenter
 	/** @var string default name for react */
 	private $reactName = '';
 
+	/** @var string password for root access to reacts */
+	public $rootPwd = 'secret';
+
 
 	protected function startup()
 	{
@@ -63,12 +66,13 @@ class HomepagePresenter extends BasePresenter
 
 		echo 'Pripojeni k reactu trvalo: ' . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
 
-		if ($socket === FALSE) echo 'Neco se posralo!<br>';
+		if ($socket === FALSE) echo 'Pripojeni na react selhalo<br>';
 		else {
-			echo 'Pripojeni na react se povedlo ;-)<br>';
-
 			list($react, $port) = self::getReactConfig($reactName, $this->tempDir);
 			if ($port !== NULL) $this->usedPorts[] = $port;
+
+			if ($this->initReact($port)) echo 'React byl spravne inicializovan<br>';
+			else echo 'Inicializace reactu selhala<br>';
 
 			$this->reacts[$reactName] = $react;
 		}
@@ -81,7 +85,7 @@ class HomepagePresenter extends BasePresenter
 		if (!count($this->reacts)) echo "Vsechny reacty jsou vypnute<br>";
 		else if ($this->killReact($reactName = array_keys($this->reacts)[0])) echo "Byl vypnut react $reactName<br>";
 		else echo "Vypnuti reactu $reactName selhalo<br>";
-		
+
 		$this->setView('default');
 	}
 
@@ -93,8 +97,8 @@ class HomepagePresenter extends BasePresenter
 
 		mkdir($temp = "$this->tempDir/$reactName", 0777);
 
-		$query = "php $this->scriptDir/testServer.php $reactName $port $temp " . self::REACT_CONFIG . " " . self::REACT_CLIENTS
-			."> $temp/" . self::REACT_LOG . " &";
+		$query = "php $this->scriptDir/testServer.php $reactName $port $temp " . self::REACT_CONFIG . " " . self::REACT_CLIENTS . " "
+			. $this->rootPwd ." > $temp/" . self::REACT_LOG . " &";
 
 		proc_close(proc_open($query, array(), $pipes, $temp, array()));
 		return array($reactName, $port);
@@ -121,11 +125,21 @@ class HomepagePresenter extends BasePresenter
 	private function connectReact($port)
 	{
 		for ($timeout = 0, $step = 10; TRUE; $timeout += $step, $step *= 1.3) {
-			echo 'Pokus o pripojeni...<br>';
 
-			$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-			socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, ['sec' => 1, 'usec' => 0]);
-			if (@socket_connect($socket, $_SERVER["HTTP_HOST"], $port)) return $socket;
+			echo 'Vytvoreni socketu => ';
+			if (FALSE !== $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)) {
+
+				echo 'Nastaveni timeoutu (1s) => ';
+				if (socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, ['sec' => 1, 'usec' => 0])) {
+
+					echo 'Pokus o pripojeni => ';
+					if (@socket_connect($socket, $_SERVER["HTTP_HOST"], $port)) {
+
+						echo 'Spojeni navazano<br>';
+						return $socket;
+					}
+				}
+			}
 
 			echo socket_strerror(socket_last_error()) . '<br>';
 			socket_close($socket);
@@ -133,6 +147,13 @@ class HomepagePresenter extends BasePresenter
 			if ($timeout > 2000) break;
 			usleep(1000 * $step);
 		}
+
+		return FALSE;
+	}
+
+	private function initReact($socket)
+	{
+		echo 'Inicializujeme react<br>';
 
 		return FALSE;
 	}

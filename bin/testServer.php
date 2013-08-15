@@ -1,17 +1,18 @@
 <?php
-if (count($argv) !== 6) die(1);
+if (count($argv) !== 7) die(1);
 
 $options = array(
 	'script' => $argv[0],
 	'name' => $argv[1],
+	'rootPwd' => $argv[6],
 	'configFile' => "$argv[3]/$argv[4]" ,
 	'clientsFile' => "$argv[3]/$argv[5]",
 	'config' => array(
 		'pid' => getmypid(),
 		'port' => intval($argv[2]),
 		'error' => 0,
-		'status' => "REACT_STARTING",
-		'clients' => 0
+		'status' => "EXPECTING_ROOT_INIT",
+		'clientCnt' => 0
 	)
 );
 
@@ -33,9 +34,13 @@ $app = function ($request, $response) use (&$i) {
 
 $loop = React\EventLoop\Factory::create();
 $socket = new React\Socket\Server($loop);
-$http = new React\Http\Server($socket);
+//$http = new React\Http\Server($socket);
 
-$http->on('request', $app);
+//$http->on('request', $app);
+
+$socket->on('connection', function ($conn) {
+	$conn->pipe($conn);
+});
 
 $socket->listen($options['config']['port']);
 $loop->run();
