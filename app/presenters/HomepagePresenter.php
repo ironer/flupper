@@ -21,7 +21,7 @@ class HomepagePresenter extends BasePresenter
 	/** @var string path to temp directory of reacts */
 	private $tempDir = '';
 
-	/** @var array (reactServerName => ['path', 'pid', 'port', 'error', 'status', 'clients']) of currently runing reacts */
+	/** @var array (reactServerName => ['pid', 'port', 'error', 'status', 'clientCnt', 'path']) of currently runing reacts */
 	private $reacts = array();
 
 	/** @var array (port => reactServerName) used ports of running reacts */
@@ -161,10 +161,10 @@ class HomepagePresenter extends BasePresenter
 
 	private function greetReact($reactName, $socket)
 	{
-		list($response, $error) = $this->readData($socket);
+		list($halo, $haloError) = $this->readData($socket);
 
-		if ($error !== 0) echo "Chyba pri cteni pozdravu reactu: $error<br>";
-		elseif ($response === $reactName) {
+		if ($haloError !== 0) echo "Chyba pri cteni identifikace reactu: $haloError<br>";
+		elseif ($halo === $reactName) {
 			echo "$reactName korektne zdravi => ";
 
 			if ($this->sendData($socket, $this->rootPwd) === strlen($this->rootPwd)) echo "Odeslano root heslo => ";
@@ -173,11 +173,16 @@ class HomepagePresenter extends BasePresenter
 				return FALSE;
 			}
 
-//			if ()
-//			socket_write($socket, $this->rootPwd, strlen($this->rootPwd));
-//			echo "React odpovida: " . $buf . "<br>";
-			return TRUE;
-		} else echo "Ocekavan pozdrav '$reactName', ale doslo '$response'<br>";
+			list($confirm, $confirmError) = $this->readData($socket);
+			if ($confirmError !== 0) echo "Chyba pri cteni potvrzeni autorizace root uctu na reactu: $haloError<br>";
+			elseif ($confirm !== 'root') echo "Chybna odpoved pri potvrzeni autorizace root uctu na reactu: '$confirm'<br>";
+			else {
+				echo "Autorizovan root pristup na react<br>";
+				return TRUE;
+			}
+
+			return FALSE;
+		} else echo "Ocekavan pozdrav '$reactName', ale doslo '$halo'<br>";
 
 		return FALSE;
 	}
