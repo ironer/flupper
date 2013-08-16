@@ -10,7 +10,8 @@ class BoardServer extends Nette\Object
 {
 
 	private $options;
-	private $clients;
+
+	private $clients = ['root' => NULL];
 
 	/** @var Nette\DI\Container */
 	private $container;
@@ -22,22 +23,20 @@ class BoardServer extends Nette\Object
 			throw new LogicException("Invalid number of arguments, expected 7");
 		}
 
-		$this->options = array(
+		$this->options = [
 			'script' => $argv[0],
 			'name' => $argv[1],
 			'rootPwd' => $argv[6],
 			'configFile' => "$argv[3]/$argv[4]",
 			'clientsFile' => "$argv[3]/$argv[5]",
-			'config' => array(
+			'config' => [
 				'pid' => getmypid(),
 				'port' => intval($argv[2]),
-				'error' => 0,
+				'error' => -1,
 				'status' => "EXPECTING_ROOT_INIT",
 				'clientCnt' => 0
-			)
-		);
-
-		$this->clients = [];
+			]
+		];
 
 		umask();
 		file_put_contents($this->options['configFile'], json_encode($this->options['config']));
@@ -61,54 +60,123 @@ class BoardServer extends Nette\Object
 	{
 		$conn->write($this->options['name']);
 
-		$status = ['init' => TRUE, 'close' => FALSE, 'root' => FALSE];
+		$client = new BoardClient($conn);
 
-		$conn->on('data', function ($data) use ($conn, &$status) {
-			$this->onConnectionData($conn, $data, $status);
+		$conn->on('data', function ($data) use ($client) {
+			$this->onConnectionData($client, $data);
 		});
 	}
 
 
-	public function onConnectionData(\React\Socket\Connection $conn, $data, &$status)
+	public function onConnectionData(\BoardClient $client, $data)
 	{
-		if ($status['init']) {
-			if (!$this->handleInit($conn, $data, $status)) return FALSE;
-			$response = FALSE;
+		$response = FALSE;
+
+		if (!$client->data['greet']) {
+			if (!$this->handleGreet($client, $data)) {
+				$client->conn->close();
+				return FALSE;
+			}
+		} elseif ($this->authorizeAccess($client->data['user'])) {
+			$response = $client->data['user'] === 'root' ? $this->handleRootData($client, $data) : $this->handleData($client, $data);
 		} else {
-			$response = $status['root'] ? $this->handleRootData($data, $status) : $this->handleData($data, $status);
+			$this->disconnectClient($client);
+			return FALSE;
 		}
 
 		if ($response !== FALSE) {
-			$conn->write($response);
+			$client->conn->write($response);
 			echo "Request:\n$data\n\nResponse:\n$response\n\n\n";
 		} else {
 			echo "Request:\n$data\n\n\n";
 		}
 
-		if ($status['close']) {
-			echo "Closing connection\n\n\n";
-			$conn->close();
+		if ($client->data['close']) {
+			echo "Closing connection for user " . $client->data['user'] . "\n\n\n";
+			$client->conn->close();
 		}
-	}
-
-
-	private function handleInit(\React\Socket\Connection $conn, $data, &$status)
-	{
-		if ($data === $this->options['rootPwd']) {
-			echo "Starting root connection\n\n\n";
-			$conn->write('root');
-			$status['root'] = TRUE;
-		} elseif (in_array($data, $this->clients)) {
-			echo "Starting connection for user '$data'\n\n\n";
-			$conn->write($data);
-		} else {
-			$conn->close();
-			return FALSE;
-		}
-		$status['init'] = FALSE;
 		return TRUE;
 	}
 
+
+	private function handleGreet(\BoardClient $client, $data)
+	{
+		if ($data === $this->options['rootPwd']) {
+			echo "Starting root connection\n\n\n";
+			$client->conn->write('root');
+			$client->data['user'] = 'root';
+		} elseif ($this->options['config']['error'] === 0 && isset($this->clients[$data])) {
+			echo "Starting connection for user '$data'\n\n\n";
+			$client->conn->write($data);
+			$client->data['user'] = $data;
+		} else {
+			return FALSE;
+		}
+
+		$client->data['greet'] = TRUE;
+		return $this->addClient($client);
+	}
+
+
+	private function addClient(\BoardClient $client)
+	{
+		if (!isset($this->clients[$client->data['user']])) {
+			return FALSE;
+		} elseif ($this->clients[$client->data['user']] !== NULL) {
+			$this->disconnectClient($this->clients[$client->data['user']]);
+		}
+
+		$this->clients[$client->data['user']] = $client;
+
+		return TRUE;
+	}
+
+
+	private function disconnectClient(\BoardClient $client)
+	{
+		if (isset($this->clients[$client->data['user']])) {
+			$this->clients[$client->data['user']] = NULL;
+		}
+
+		echo "Closing connection for user " . $client->data['user'] . "\n\n\n";
+
+		$client->conn->close();
+		unset($client->conn);
+		unset($client);
+
+		return TRUE;
+	}
+
+
+	private function authorizeAccess($user)
+	{
+		return $user === 'root' || ($this->options['config']['error'] === 0 && isset($this->clients[$user]));
+	}
+
+
+	private function handleRootData($data, &$conData)
+	{
+		return FALSE;
+	}
+
+
+	private function handleData($data, &$conData)
+	{
+		return FALSE;
+	}
+}
+
+
+class BoardClient extends Nette\Object
+{
+	public $conn;
+
+	public $data = ['greet' => FALSE, 'close' => FALSE, 'user' => NULL];
+
+	public function __construct(\React\Socket\Connection $connection)
+	{
+		$this->conn = $connection;
+	}
 }
 
 
