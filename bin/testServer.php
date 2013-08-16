@@ -11,7 +11,7 @@ class BoardServer extends Nette\Object
 
 	private $options;
 
-	private $clients = ['root' => NULL];
+	private $clients = ['root' => FALSE];
 
 	/** @var Nette\DI\Container */
 	private $container;
@@ -70,30 +70,27 @@ class BoardServer extends Nette\Object
 
 	public function onConnectionData(\BoardClient $client, $data)
 	{
-		$response = FALSE;
-
 		if (!$client->data['greet']) {
 			if (!$this->handleGreet($client, $data)) {
-				$client->conn->close();
+				$this->closeConnection($client);
 				return FALSE;
 			}
-		} elseif ($this->authorizeAccess($client->data['user'])) {
-			$response = $client->data['user'] === 'root' ? $this->handleRootData($client, $data) : $this->handleData($client, $data);
-		} else {
+		} elseif (!$this->authorizeAccess($client->data['user'])) {
 			$this->disconnectClient($client);
 			return FALSE;
-		}
-
-		if ($response !== FALSE) {
-			$client->conn->write($response);
-			echo "Request:\n$data\n\nResponse:\n$response\n\n\n";
 		} else {
-			echo "Request:\n$data\n\n\n";
+			$response = $client->data['user'] === 'root' ? $this->handleRootData($client, $data) : $this->handleData($client, $data);
+
+			if ($response !== FALSE) {
+				$client->conn->write($response);
+				echo "Request:\n$data\n\nResponse:\n$response\n\n\n";
+			} else {
+				echo "Request:\n$data\n\n\n";
+			}
 		}
 
 		if ($client->data['close']) {
-			echo "Closing connection for user " . $client->data['user'] . "\n\n\n";
-			$client->conn->close();
+			$this->disconnectClient($client);
 		}
 		return TRUE;
 	}
@@ -114,7 +111,7 @@ class BoardServer extends Nette\Object
 		}
 
 		$client->data['greet'] = TRUE;
-		return $this->addClient($client);
+		return $this->addClient($client);;
 	}
 
 
@@ -122,7 +119,7 @@ class BoardServer extends Nette\Object
 	{
 		if (!isset($this->clients[$client->data['user']])) {
 			return FALSE;
-		} elseif ($this->clients[$client->data['user']] !== NULL) {
+		} elseif ($this->clients[$client->data['user']] !== FALSE) {
 			$this->disconnectClient($this->clients[$client->data['user']]);
 		}
 
@@ -135,10 +132,19 @@ class BoardServer extends Nette\Object
 	private function disconnectClient(\BoardClient $client)
 	{
 		if (isset($this->clients[$client->data['user']])) {
-			$this->clients[$client->data['user']] = NULL;
+			echo "Removing active connection for " . $client->data['user'] . ". User can reconnect later.\n\n\n";
+			$this->clients[$client->data['user']] = FALSE;
 		}
 
-		echo "Closing connection for user " . $client->data['user'] . "\n\n\n";
+		$this->closeConnection($client);
+
+		return TRUE;
+	}
+
+
+	private function closeConnection(\BoardClient $client)
+	{
+		echo "Closing connection for user " . ($client->data['user'] ?: 'unknown') . ".\n\n\n";
 
 		$client->conn->close();
 		unset($client->conn);
@@ -154,24 +160,24 @@ class BoardServer extends Nette\Object
 	}
 
 
-	private function handleRootData($data, &$conData)
+	private function handleRootData(\BoardClient $client, $data)
 	{
 		return FALSE;
 	}
 
 
-	private function handleData($data, &$conData)
+	private function handleData(\BoardClient $client, $data)
 	{
 		return FALSE;
 	}
 }
 
 
-class BoardClient extends Nette\Object
+class BoardClient
 {
 	public $conn;
 
-	public $data = ['greet' => FALSE, 'close' => FALSE, 'user' => NULL];
+	public $data = ['greet' => FALSE, 'close' => FALSE, 'user' => FALSE];
 
 	public function __construct(\React\Socket\Connection $connection)
 	{

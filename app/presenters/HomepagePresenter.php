@@ -50,7 +50,7 @@ class HomepagePresenter extends BasePresenter
 		list($this->reacts, $this->usedPorts) = self::getReactsData($this->tempDir);
 		$this->reactName = !empty($this->name) ? $this->name : 'Default';
 
-		echo 'Nacteni reactu (' . count($this->reacts) . '): ' . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
+		echo "Reading of reacts' configurations (" . count($this->reacts) . ") took: " . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
 	}
 
 
@@ -71,10 +71,10 @@ class HomepagePresenter extends BasePresenter
 
 		$socket = $this->connectReact($port);
 
-		echo 'Pripojeni k reactu trvalo: ' . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
+		echo "Connecting to react took: " . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . " ms<br>";
 
 		if ($socket === FALSE) {
-			echo 'Pripojeni na react selhalo<br>';
+			echo "Connecting to react failed<br>";
 		} else {
 			list($react, $port) = self::getReactConfig($reactName, $this->tempDir);
 			if ($port !== NULL) {
@@ -82,11 +82,11 @@ class HomepagePresenter extends BasePresenter
 			}
 
 			if (!$this->greetReact($reactName, $socket)) {
-				echo 'Pokus o root komunikaci s reactem selhal<br>';
+				echo "Request for root communication failed<br>";
 			} elseif (!$this->initReact($reactName, $socket)) {
-				echo 'Pokus o inicializaci reactu selhal<br>';
+				echo "Request for react initialization failed<br>";
 			} else {
-				echo 'React byl radne inicializovan a prijima pripojeni<br>';
+				echo "React was initialized correctly and expects connections from clients<br>";
 			}
 
 			$this->reacts[$reactName] = $react;
@@ -99,11 +99,11 @@ class HomepagePresenter extends BasePresenter
 	public function actionKillReact()
 	{
 		if (!count($this->reacts)) {
-			echo "Vsechny reacty jsou vypnute<br>";
+			echo "All react servers are already shut down<br>";
 		} elseif ($this->killReact($reactName = array_keys($this->reacts)[0])) {
-			echo "Byl vypnut react $reactName<br>";
+			echo "$reactName was shut down<br>";
 		} else {
-			echo "Vypnuti reactu $reactName selhalo<br>";
+			echo "Shutting down of $reactName failed<br>";
 		}
 
 		$this->setView('default');
@@ -113,7 +113,7 @@ class HomepagePresenter extends BasePresenter
 	private function startReact()
 	{
 		if (count($this->reacts) > 30) {
-			throw new Exception('Hele, neblbni.');
+			throw new Exception('No more than 30 react servers allowed.');
 		}
 		for ($timeout = 1; isset($this->reacts[$reactName = $this->reactName . str_pad($timeout, 3, '0', STR_PAD_LEFT)]); ) {
 			++$timeout;
@@ -126,7 +126,7 @@ class HomepagePresenter extends BasePresenter
 		$query = "php $this->scriptDir/testServer.php $reactName $port $temp " . self::REACT_CONFIG . " " . self::REACT_CLIENTS . " "
 			. $this->rootPwd ." > $temp/" . self::REACT_LOG . " &";
 
-		echo "Asynchronni spusteni reactu $reactName na portu $port<br>";
+		echo "Starting react $reactName on port $port<br>";
 		proc_close(proc_open($query, [], $pipes, $temp, []));
 
 		return [$reactName, $port];
@@ -160,16 +160,16 @@ class HomepagePresenter extends BasePresenter
 	{
 		for ($timeout = 0, $step = 10; TRUE; $timeout += $step, $step *= 1.3) {
 
-			echo "Vytvoreni socketu => ";
+			echo "Creating TCP socket => ";
 			if (FALSE !== $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)) {
 
-				echo "Nastaveni timeoutu (1s) => ";
+				echo "Setting timeout to 1 second => ";
 				if (socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, ['sec' => 1, 'usec' => 0])) {
 
-					echo "Pokus o pripojeni (port $port) => ";
+					echo "Connecting to port $port => ";
 					if (@socket_connect($socket, $_SERVER["HTTP_HOST"], $port)) {
 
-						echo "Spojeni navazano<br>";
+						echo "Connection successful<br>";
 						return $socket;
 					}
 				}
@@ -190,7 +190,7 @@ class HomepagePresenter extends BasePresenter
 
 	private function initReact($reactName, $socket)
 	{
-		echo "Odesilam inicializaci reactu => ";
+		echo "Sending init request => ";
 
 //		if ($this->sendData($socket, "init") !== 4) {
 //			echo " Odeslani selhalo<br>";
@@ -212,30 +212,30 @@ class HomepagePresenter extends BasePresenter
 		list($halo, $haloError) = $this->readData($socket);
 
 		if ($haloError !== 0) {
-			echo "Chyba pri cteni identifikace reactu: $haloError<br>";
+			echo "Reading of react's identification failed: $haloError<br>";
 		} elseif ($halo === $reactName) {
-			echo "$reactName korektne zdravi => ";
+			echo "$reactName greets correctly => ";
 
 			if ($this->sendData($socket, $this->rootPwd) === strlen($this->rootPwd)) {
-				echo "Odeslano root heslo => ";
+				echo "Root password sent => ";
 			} else {
-				echo 'Selhalo odeslani root hesla<br>';
+				echo "Sending of root password failed<br>";
 				return FALSE;
 			}
 
 			list($confirm, $confirmError) = $this->readData($socket);
 			if ($confirmError !== 0) {
-				echo "Chyba pri cteni potvrzeni autorizace root uctu na reactu: $haloError<br>";
+				echo "Reading the confirmation of root access failed: $haloError<br>";
 			} elseif ($confirm !== 'root') {
-				echo "Chybna odpoved pri potvrzeni autorizace root uctu na reactu: '$confirm'<br>";
+				echo "Wrong reply for confirmation or root access: '$confirm'<br>";
 			} else {
-				echo "Autorizovan root pristup na react<br>";
+				echo "Root access authorized<br>";
 				return TRUE;
 			}
 
 			return FALSE;
 		} else {
-			echo "Ocekavan pozdrav '$reactName', ale doslo '$halo'<br>";
+			echo "Expecting react's identity '$reactName', but received '$halo'<br>";
 		}
 
 		return FALSE;
@@ -296,10 +296,10 @@ class HomepagePresenter extends BasePresenter
 			if (is_dir($parentDir = dirname($reactTemp)) && is_writable($parentDir)) {
 				mkdir($reactTemp, 0777);
 			} else {
-				throw new Exception("V TEMP adresari ($parentDir) nelze vytvorit podadresar pro react servery.");
+				throw new Exception("Attemtp to create subdirectory for react servers failed in TEMP ($parentDir).");
 			}
 		} elseif (!is_writable($reactTemp)) {
-			throw new Exception("Do TEMP adresare pro react servery ($reactTemp) nelze zapisovat.");
+			throw new Exception("TEMP directory for react servers ($reactTemp) isn'r writable.");
 		}
 	}
 
@@ -309,14 +309,14 @@ class HomepagePresenter extends BasePresenter
 		$port = NULL;
 
 		if (!is_file($statusFile = "$reactTemp/$reactName/" . self::REACT_CONFIG)) {
-			$react = ['error' => 1, 'status' => "Nelze nalezt soubor " . self::REACT_CONFIG . " s konfiguraci reactu."];
+			$react = ['error' => 1, 'status' => "File " . self::REACT_CONFIG . " with react config wasn't found."];
 		} elseif (!is_writable($statusFile)) {
-			$react = ['error' => 2, 'status' => "Soubor " . self::REACT_CONFIG . " s konfiguraci reactu neni zapisovatelny."];
+			$react = ['error' => 2, 'status' => "File " . self::REACT_CONFIG . " with react config isn't writable."];
 		} else {
 			$react = json_decode(file_get_contents($statusFile), TRUE);
 
 			if (!is_array($react) || count($react) !== 5 || empty($react['port'])) {
-				$react = ['error' => 3, 'status' => "Nelze nacist validni konfiguraci reactu ze souboru " . self::REACT_CONFIG . "."];
+				$react = ['error' => 3, 'status' => "There is no valid configuration in the file " . self::REACT_CONFIG . "."];
 			} else {
 				$port = $react['port'];
 			}
