@@ -188,25 +188,6 @@ class HomepagePresenter extends BasePresenter
 	}
 
 
-	private function initReact($reactName, $socket)
-	{
-		echo "Sending init request => ";
-
-//		if ($this->sendData($socket, "init") !== 4) {
-//			echo " Odeslani selhalo<br>";
-//		} else {
-//			list($init, $initError) = $this->readData($socket);
-//
-//			if ($initError !== 0) {
-//				echo "Chyba pri cteni odpovedi reactu: $initError<br>";
-//			} else
-//		}
-
-
-		return FALSE;
-	}
-
-
 	private function greetReact($reactName, $socket)
 	{
 		list($halo, $haloError) = $this->readData($socket);
@@ -236,6 +217,29 @@ class HomepagePresenter extends BasePresenter
 			return FALSE;
 		} else {
 			echo "Expecting react's identity '$reactName', but received '$halo'<br>";
+		}
+
+		return FALSE;
+	}
+
+
+	private function initReact($reactName, $socket)
+	{
+		echo "Sending init request => ";
+
+		if ($this->sendData($socket, "init") !== 4) {
+			echo " Sending of init command failed<br>";
+		} else {
+			list($init, $initError) = $this->readData($socket);
+
+			if ($initError !== 0) {
+				echo "Attempt to read response failed: $initError<br>";
+			} elseif ($init !== 'init') {
+				echo "Wrong response: $init<br>";
+			} else {
+				echo "Initialization successful<br>";
+				return TRUE;
+			}
 		}
 
 		return FALSE;

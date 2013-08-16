@@ -162,6 +162,11 @@ class BoardServer extends Nette\Object
 
 	private function handleRootData(\BoardClient $client, $data)
 	{
+		if ($data === 'init') {
+			$client->conn->write('init');
+			return TRUE;
+		}
+
 		return FALSE;
 	}
 
