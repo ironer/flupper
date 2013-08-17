@@ -9,3 +9,12 @@ namespace Nemure;
 
 use Nette;
 use React;
+
+/**
+ * Class for handling TCP connection to react server and storing asociated data.
+ * @author Stefan Fiedler
+ */
+class RootConnection extends Nette\Object
+{
+
+}

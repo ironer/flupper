@@ -7,15 +7,14 @@ namespace Nemure;
  * For the full copyright and license information, please view the file license.txt that was distributed with this source code.
  */
 
-// $this->getSession('User/Reacts')->members[$userId] = $reactId;
-
 use Nette;
 
 use Nette\Utils\Finder;
 use Nette\Diagnostics\Debugger;
 
 /**
- * Homepage presenter.
+ * Root access class for starting, killing and configuring of react servers.
+ * @author Stefan Fiedler
  */
 class Root extends Nette\Object
 {

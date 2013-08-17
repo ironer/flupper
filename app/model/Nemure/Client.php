@@ -11,6 +11,7 @@ use Nette;
 use React;
 
 /**
+ * Class for storing connections to react server.
  * @author Stefan Fiedler
  */
 class Client extends Nette\Object

@@ -17,6 +17,7 @@ $container = require_once __DIR__ . '/../../bootstrap.php';
 $container->getByType('Nette\Http\IResponse')->setContentType('text/plain');
 
 /**
+ * Server script for running react.
  * @author Stefan Fiedler
  */
 class Server extends Nette\Object

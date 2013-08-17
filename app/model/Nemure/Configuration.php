@@ -2,7 +2,7 @@
 namespace Nemure;
 
 /**
- * Copyright (c) 2012 Stefan Fiedler
+ * Copyright (c) 2013 Stefan Fiedler
  *
  * For the full copyright and license information, please view the file license.txt that was distributed with this source code.
  */
@@ -10,6 +10,7 @@ namespace Nemure;
 use Nette;
 
 /**
+ * Class for storing configuration data for react servers.
  * @author Stefan Fiedler
  */
 class Configuration extends Nette\Object
