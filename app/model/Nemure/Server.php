@@ -1,13 +1,28 @@
 <?php
+namespace Nemure;
 
-$container = require_once __DIR__ . '/../app/bootstrap.php';
-/** @var \Nette\DI\Container $container */
+/**
+ * Copyright (c) 2013 Stefan Fiedler
+ *
+ * For the full copyright and license information, please view the file license.txt that was distributed with this source code.
+ */
+
+use Nette;
+use React;
+
+$container = require_once __DIR__ . '/../../bootstrap.php';
+/** @var Nette\DI\Container $container */
 
 \Nette\Diagnostics\Debugger::$productionMode = FALSE;
 $container->getByType('Nette\Http\IResponse')->setContentType('text/plain');
 
-class BoardServer extends Nette\Object
+/**
+ * @author Stefan Fiedler
+ */
+class Server extends Nette\Object
 {
+	/** @var Configuration */
+	private $conf;
 
 	private $options;
 
@@ -17,29 +32,37 @@ class BoardServer extends Nette\Object
 	private $container;
 
 
-	public function __construct(\Nette\DI\Container $container, $argv)
+	public function __construct(Nette\DI\Container $container, $argv)
 	{
-		if (count($argv) !== 7) {
-			throw new LogicException("Invalid number of arguments, expected 7");
+		if (count($argv) !== 4) {
+			throw new \LogicException("Invalid number of arguments, expected 4");
 		}
 
+		$this->conf = new Configuration($container->parameters['tempDir']);
+
+		$path = $this->conf->tempPath . '/' . $argv[1];
+
 		$this->options = [
-			'script' => $argv[0],
 			'name' => $argv[1],
-			'rootPwd' => $argv[6],
-			'configFile' => "$argv[3]/$argv[4]",
-			'clientsFile' => "$argv[3]/$argv[5]",
+			'rootPwd' => $argv[3],
 			'config' => [
 				'pid' => getmypid(),
 				'port' => intval($argv[2]),
 				'error' => -1,
 				'status' => "EXPECTING_ROOT_INIT",
-				'clientCnt' => 0
+				'clientCnt' => 0,
+				'path' => $path
+			],
+			'files' => [
+				'script' => $argv[0],
+				'config' => $path . '/' . $this->conf->files['config'],
+				'clients' => $path . '/' . $this->conf->files['clients']
 			]
 		];
 
 		umask();
-		file_put_contents($this->options['configFile'], json_encode($this->options['config']));
+		file_put_contents($this->options['files']['config'], json_encode($this->options['config']));
+
 		$this->container = $container;
 	}
 
@@ -56,11 +79,11 @@ class BoardServer extends Nette\Object
 	}
 
 
-	public function onConnection(\React\Socket\Connection $conn)
+	public function onConnection(React\Socket\Connection $conn)
 	{
 		$conn->write($this->options['name']);
 
-		$client = new BoardClient($conn);
+		$client = new Client($conn);
 
 		$conn->on('data', function ($data) use ($client) {
 			$this->onConnectionData($client, $data);
@@ -68,7 +91,7 @@ class BoardServer extends Nette\Object
 	}
 
 
-	public function onConnectionData(\BoardClient $client, $data)
+	public function onConnectionData(Client $client, $data)
 	{
 		if (!$client->data['greet']) {
 			if (!$this->handleGreet($client, $data)) {
@@ -96,7 +119,7 @@ class BoardServer extends Nette\Object
 	}
 
 
-	private function handleGreet(\BoardClient $client, $data)
+	private function handleGreet(Client $client, $data)
 	{
 		if ($data === $this->options['rootPwd']) {
 			echo "Starting root connection\n\n\n";
@@ -111,11 +134,11 @@ class BoardServer extends Nette\Object
 		}
 
 		$client->data['greet'] = TRUE;
-		return $this->addClient($client);;
+		return $this->addClient($client);
 	}
 
 
-	private function addClient(\BoardClient $client)
+	private function addClient(Client $client)
 	{
 		if (!isset($this->clients[$client->data['user']])) {
 			return FALSE;
@@ -129,7 +152,7 @@ class BoardServer extends Nette\Object
 	}
 
 
-	private function disconnectClient(\BoardClient $client)
+	private function disconnectClient(Client $client)
 	{
 		if (isset($this->clients[$client->data['user']])) {
 			echo "Removing active connection for " . $client->data['user'] . ". User can reconnect later.\n\n\n";
@@ -142,7 +165,7 @@ class BoardServer extends Nette\Object
 	}
 
 
-	private function closeConnection(\BoardClient $client)
+	private function closeConnection(Client $client)
 	{
 		echo "Closing connection for user " . ($client->data['user'] ?: 'unknown') . ".\n\n\n";
 
@@ -160,36 +183,21 @@ class BoardServer extends Nette\Object
 	}
 
 
-	private function handleRootData(\BoardClient $client, $data)
+	private function handleRootData(Client $client, $data)
 	{
 		if ($data === 'init') {
-			$client->conn->write('init');
-			return TRUE;
+			return 'init';
 		}
 
 		return FALSE;
 	}
 
 
-	private function handleData(\BoardClient $client, $data)
+	private function handleData(Client $client, $data)
 	{
 		return FALSE;
 	}
 }
 
-
-class BoardClient
-{
-	public $conn;
-
-	public $data = ['greet' => FALSE, 'close' => FALSE, 'user' => FALSE];
-
-	public function __construct(\React\Socket\Connection $connection)
-	{
-		$this->conn = $connection;
-	}
-}
-
-
-$server = new BoardServer($container, $argv);
+$server = new Server($container, $_SERVER['argv']);
 $server->start();
