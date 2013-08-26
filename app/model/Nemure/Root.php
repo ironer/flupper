@@ -13,87 +13,90 @@ use Nette\Utils\Finder;
 use Nette\Diagnostics\Debugger;
 
 /**
- * Root access class for starting, killing and configuring of react servers.
+ * Root access class for starting, killing and configuring of reactor servers.
  * @author Stefan Fiedler
  */
 class Root extends Nette\Object
 {
 	/** @var Configuration */
-	public $conf;
+	public $configuration;
 
-	/** @var array (reactServerName => ['pid', 'port', 'error', 'status', 'clientCnt', 'path']) of currently runing reacts */
-	public $reacts = [];
+	/** @var array (reactorServerName => ['pid', 'port', 'error', 'status', 'clientCount', 'path']) of currently running reactors */
+	public $reactors = [];
 
-	/** @var array (port => reactServerName) used ports of running reacts */
+	/** @var array (port => reactorServerName) used ports of running reactors */
 	public $usedPorts = [];
 
-	/** @var string default name for react */
-	public $reactName;
+	/** @var string default name for reactor */
+	public $reactorName;
 
-	/** @var string password for root access to reacts */
-	public $rootPwd = 'secret';
+	/** @var string password for root access to reactors */
+	public $rootPassword = 'secret';
 
 
-	public function __construct($tempDir, $reactName)
+	public function __construct($tempDir, $reactorName)
 	{
 		$time = microtime(TRUE);
 
-		$this->conf = new Configuration($tempDir);
+		$this->configuration = new Configuration($tempDir);
 
-		list($this->reacts, $this->usedPorts) = $this->getReactsData();
+		list($this->reactors, $this->usedPorts) = $this->getReactorsData();
 
-		$this->reactName = !empty($reactName) ? $reactName : 'Default';
+		$this->reactorName = !empty($reactorName) ? $reactorName : 'Default';
 
-		echo "Reading of reacts' configurations (" . count($this->reacts) . ") took: " . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
+		echo "Reading of reactors' configurations (" . count($this->reactors) . ") took: "
+				. number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
 	}
 
 
-	public function startReact()
+	public function startReactor()
 	{
-		list($reactName, $port) = $this->runReact();
+		list($reactorName, $port) = $this->runReactor();
 
 		$time = microtime(TRUE);
 
-		$socket = $this->connectReact($port);
+		$socket = $this->connectReactor($port);
 
-		echo "Connecting to react took: " . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . " ms<br>";
+		echo "Connecting to reactor took: " . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . " ms<br>";
 
 		if ($socket === FALSE) {
-			echo "Connecting to react failed<br>";
+			echo "Connecting to reactor failed<br>";
 		} else {
-			list($react, $port) = self::getReactConfig($reactName, $this->conf->tempPath);
-			if ($port !== NULL) {
-				$this->usedPorts[] = $port;
+			$reactorOptions = new Options($reactorName, $this->configuration);
+			if ($reactorOptions->read()) {
+				var_dump($reactorOptions);
+				$usedPorts[$reactorOptions->port] = $reactorOptions->name;
 			}
 
-			if (!$this->greetReact($reactName, $socket)) {
+			if (!$this->greetReactor($reactorName, $socket)) {
 				echo "Request for root communication failed<br>";
-			} elseif (!$this->initReact($socket)) {
-				echo "Request for react initialization failed<br>";
+			} elseif (!$this->initReactor($socket)) {
+				echo "Request for reactor initialization failed<br>";
 			} else {
-				echo "React was initialized correctly and expects connections from clients<br>";
+				echo "Reactor was initialized correctly and expects connections from clients<br>";
 			}
 
-			$this->reacts[$reactName] = $react;
+			$this->reactors[$reactorName] = $reactorOptions;
 		}
 	}
 
 
-	public function killReact($reactName)
+	public function killReactor($reactorName)
 	{
-		if (empty($this->reacts[$reactName])) {
+		if (empty($this->reactors[$reactorName])) {
 			return FALSE;
 		}
-		$react = $this->reacts[$reactName];
+		$reactor = $this->reactors[$reactorName];
 
-		if (isset($react['pid'], $react['path']) && posix_kill($react['pid'], 15)) {
+		if (isset($reactor['pid'], $reactor['path']) && posix_kill($reactor['pid'], 15)) {
 
-			foreach (Finder::findFiles('*')->from($react['path'])->childFirst() as $path => $file) {
+			foreach (Finder::findFiles('*')->from($reactor['path'])->childFirst() as $path => $file) {
 				unlink($path);
 			}
 
-			rmdir($react['path']);
-			unset($this->reacts[$reactName]);
+			rmdir($reactor['path']);
+			unset($this->reactors[$reactorName]);
+			unset($this->usedPorts[$reactor['port']]);
 
 			return TRUE;
 		}
@@ -102,30 +105,31 @@ class Root extends Nette\Object
 	}
 
 
-	private function runReact()
+	private function runReactor()
 	{
-		if (count($this->reacts) > 30) {
-			throw new \Exception('No more than 30 react servers allowed.');
+		if (count($this->reactors) > 30) {
+			throw new \Exception('No more than 30 reactor servers allowed.');
 		}
-		for ($timeout = 1; isset($this->reacts[$reactName = $this->reactName . str_pad($timeout, 3, '0', STR_PAD_LEFT)]); ) {
-			++$timeout;
+		for ($reactorNumber = 1; isset($this->reactors[$reactorName = $this->reactorName . str_pad($reactorNumber, 3, '0', STR_PAD_LEFT)]); ) {
+			++$reactorNumber;
 		}
 		do {
 			$port = rand(1300, 1400);
-		} while (in_array($port, $this->usedPorts));
+		} while (isset($this->usedPorts[$port]));
 
-		mkdir($temp = $this->conf->tempPath . "/$reactName", 0777);
+		mkdir($temp = $this->configuration->tempPath . "/$reactorName", 0777);
 
-		$query = "php " . $this->conf->nemurePath . "/Server.php $reactName $port $this->rootPwd > $temp/" . $this->conf->files['log'] . " &";
+		$query = "php " . $this->configuration->nemurePath . "/Reactor.php $reactorName $port $this->rootPassword > $temp/"
+				. $this->configuration->files['log'] . " &";
 
-		echo "Starting react $reactName on port $port<br>";
+		echo "Starting reactor $reactorName on port $port<br>";
 		proc_close(proc_open($query, [], $pipes, $temp, []));
 
-		return [$reactName, $port];
+		return [$reactorName, $port];
 	}
 
 
-	private function connectReact($port)
+	private function connectReactor($port)
 	{
 		for ($timeout = 0, $step = 10; TRUE; $timeout += $step, $step *= 1.3) {
 
@@ -147,7 +151,7 @@ class Root extends Nette\Object
 			echo socket_strerror(socket_last_error()) . '<br>';
 			socket_close($socket);
 
-			if ($timeout > 3000) {
+			if ($timeout > 2000) {
 				break;
 			}
 			usleep(1000 * $step);
@@ -157,16 +161,16 @@ class Root extends Nette\Object
 	}
 
 
-	private function greetReact($reactName, $socket)
+	private function greetReactor($reactorName, $socket)
 	{
 		list($halo, $haloError) = $this->readData($socket);
 
 		if ($haloError !== 0) {
-			echo "Reading of react's identification failed: $haloError<br>";
-		} elseif ($halo === $reactName) {
-			echo "$reactName greets correctly => ";
+			echo "Reading of reactor's identification failed: $haloError<br>";
+		} elseif ($halo === $reactorName) {
+			echo "$reactorName greets correctly => ";
 
-			if ($this->sendData($socket, $this->rootPwd) === strlen($this->rootPwd)) {
+			if ($this->sendData($socket, $this->rootPassword) === strlen($this->rootPassword)) {
 				echo "Root password sent => ";
 			} else {
 				echo "Sending of root password failed<br>";
@@ -177,7 +181,7 @@ class Root extends Nette\Object
 			if ($confirmError !== 0) {
 				echo "Reading the confirmation of root access failed: $haloError<br>";
 			} elseif ($confirm !== 'root') {
-				echo "Wrong reply for confirmation or root access: '$confirm'<br>";
+				echo "Wrong reply for confirmation of root access: '$confirm'<br>";
 			} else {
 				echo "Root access authorized<br>";
 				return TRUE;
@@ -185,14 +189,14 @@ class Root extends Nette\Object
 
 			return FALSE;
 		} else {
-			echo "Expecting react's identity '$reactName', but received '$halo'<br>";
+			echo "Expecting reactor's name '$reactorName', but received '$halo'<br>";
 		}
 
 		return FALSE;
 	}
 
 
-	private function initReact($socket)
+	private function initReactor($socket)
 	{
 		echo "Sending init request => ";
 
@@ -241,68 +245,41 @@ class Root extends Nette\Object
 	}
 
 
-	private function getReactsData()
+	private function getReactorsData()
 	{
-		$this->checkReactTemp();
+		$this->checkReactorTemp();
 
-		$reacts = [];
+		$reactors = [];
 		$usedPorts = [];
 
-		foreach (Finder::findDirectories('*')->in($this->conf->tempPath) as $dir) {
+		foreach (Finder::findDirectories('*')->in($this->configuration->tempPath) as $dir) {
 			/** @var \SplFileInfo $dir */
-			$reactName = $dir->getFilename();
+			$reactorName = $dir->getFilename();
 
-			list($react, $port) = $this->getReactConfig($reactName);
-			if ($port !== NULL) {
-				$usedPorts[] = $port;
+			$reactorOptions = new Options($reactorName, $this->configuration);
+			if ($reactorOptions->read()) {
+				$usedPorts[$reactorOptions->port] = $reactorName;
 			}
 
-			$reacts[$reactName] = $react;
+			$reactors[$reactorName] = $reactorOptions;
 		}
 
-		return [$reacts, $usedPorts];
+		return [$reactors, $usedPorts];
 	}
 
 
-	private function checkReactTemp()
+	private function checkReactorTemp()
 	{
-		if (!is_dir($reactTemp = $this->conf->tempPath)) {
-			if (is_dir($parentDir = dirname($reactTemp)) && is_writable($parentDir)) {
-				mkdir($reactTemp, 0777);
+		if (!is_dir($reactorTemp = $this->configuration->tempPath)) {
+			if (is_dir($parentDir = dirname($reactorTemp)) && is_writable($parentDir)) {
+				mkdir($reactorTemp, 0777);
 			} else {
-				throw new \Exception("Attemtp to create subdirectory for react servers failed in TEMP ($parentDir).");
+				throw new \Exception("Attemtp to create subdirectory for reactor servers failed in TEMP ($parentDir).");
 			}
-		} elseif (!is_writable($reactTemp)) {
-			throw new \Exception("TEMP directory for react servers ($reactTemp) isn'r writable.");
+		} elseif (!is_writable($reactorTemp)) {
+			throw new \Exception("TEMP directory for reactor servers ($reactorTemp) isn't writable.");
 		}
 
 		return TRUE;
-	}
-
-
-	private function getReactConfig($reactName)
-	{
-		$port = NULL;
-
-		$reactPath = $this->conf->tempPath . "/$reactName";
-		$configName = $this->conf->files['config'];
-		$reactConfig = "$reactPath/$configName";
-
-		if (!is_file($reactConfig)) {
-			$react = ['error' => 1, 'status' => "File $configName with react config wasn't found."];
-		} elseif (!is_writable($reactConfig)) {
-			$react = ['error' => 2, 'status' => "File $configName with react config isn't writable."];
-		} else {
-			$react = json_decode(file_get_contents($reactConfig), TRUE);
-
-			if (!is_array($react) || count($react) !== 6 || empty($react['port'])) {
-				$react = ['error' => 3, 'status' => "There is no valid configuration in the file $configName."];
-			} else {
-				$port = $react['port'];
-			}
-		}
-		$react['path'] = $reactPath;
-
-		return [$react, $port];
 	}
 }

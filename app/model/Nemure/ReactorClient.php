@@ -11,18 +11,18 @@ use Nette;
 use React;
 
 /**
- * Class for storing connections to react server.
+ * Class for storing clients' connections to react server.
  * @author Stefan Fiedler
  */
-class Client extends Nette\Object
+class ReactorClient extends Nette\Object
 {
 	/** @var React\Socket\Connection */
-	public $conn;
+	public $connection;
 
 	public $data = ['greet' => FALSE, 'close' => FALSE, 'user' => FALSE];
 
 	public function __construct(React\Socket\Connection $connection)
 	{
-		$this->conn = $connection;
+		$this->connection = $connection;
 	}
 }

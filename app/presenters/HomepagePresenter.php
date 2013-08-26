@@ -23,27 +23,28 @@ class HomepagePresenter extends BasePresenter
 
 	public function renderDefault()
 	{
-		dump($this->root->conf);
-		dump($this->root->reacts);
+		dump($this->root->configuration);
+		dump($this->root->reactors);
+		dump($this->root->usedPorts);
 	}
 
 
-	public function actionStartReact()
+	public function actionStartReactor()
 	{
-		$this->root->startReact();
+		$this->root->startReactor();
 
 		$this->setView('default');
 	}
 
 
-	public function actionKillReact()
+	public function actionKillReactor()
 	{
-		if (!count($this->root->reacts)) {
-			echo "All react servers are already shut down<br>";
-		} elseif ($this->root->killReact($reactName = array_keys($this->root->reacts)[0])) {
-			echo "$reactName was shut down<br>";
+		if (!count($this->root->reactors)) {
+			echo "All reactor servers are already shut down<br>";
+		} elseif ($this->root->killReactor($reactorName = array_keys($this->root->reactors)[0])) {
+			echo "$reactorName was shut down<br>";
 		} else {
-			echo "Shutting down of $reactName failed<br>";
+			echo "Shutting down of $reactorName failed<br>";
 		}
 
 		$this->setView('default');

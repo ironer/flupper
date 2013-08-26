@@ -10,23 +10,27 @@ namespace Nemure;
 use Nette;
 
 /**
- * Class for storing configuration data for react servers.
+ * Class for storing configuration data for reactor servers.
  * @author Stefan Fiedler
  */
 class Configuration extends Nette\Object
 {
-	const CMD_INIT = 'init'; // initializing command for react server to respond to clients
-	const CMD_INFO = 'info'; // info command for recieving config array of react server in serialized json
-	const CMD_DIE = 'die'; // die command for react server to stop itself
-	const CMD_ADD_CLIENT = 'add'; // command like add SSID to allow given client access to react server
+	const CMD_INIT = 'init'; // initializing command for reactor server to start accepting client connections
+	const CMD_DIE = 'die'; // die command for reactor server to stop itself
+	const CMD_ADD_CLIENT = 'add'; // command like 'add [SSID]' to allow the access to given client
 	const CMD_REMOVE_CLIENT = 'remove'; // remove given SSID client (connection to client will be closed immediately)
-	const CMD_GET_USERS = 'clients'; // get the clients array
+	const CMD_GET_OPTIONS = 'options'; // command for recieving options array of reactor server in serialized json
+	const CMD_GET_USERS = 'clients'; // get the clients array in serialized json
+
+	const STATUS_EXPECTING_REACTOR_SPECIFIC_OPTIONS = 'EXPECTING_REACTOR_SPECIFIC_OPTIONS';
+	const STATUS_EXPECTING_ROOT_INIT = 'EXPECTING_ROOT_INIT';
+	const STATUS_ACCEPTING_CLIENT_CONNECTIONS = 'ACCEPTING_CLIENT_CONNECTIONS';
 
 
 	public $files = [
-		'config' => 'config.json', // default filename for storing react configuration
-		'clients' => 'clients.json', // default filename for storing react clients
-		'log' => 'stdout.txt', // default filename for redirecting react's output
+		'options' => 'options.json', // default filename for storing reactor's options
+		'clients' => 'clients.json', // default filename for storing reactor's clients
+		'log' => 'stdout.txt' // default filename for redirecting reactor's output
 	];
 
 	public $nemurePath = __DIR__; // absolute path to Nemure scripts
@@ -36,6 +40,6 @@ class Configuration extends Nette\Object
 
 	public function __construct($tempDir)
 	{
-		$this->tempPath = realpath($tempDir) . '/reacts';
+		$this->tempPath = realpath($tempDir) . '/reactors';
 	}
 }

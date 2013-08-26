@@ -13,24 +13,26 @@ use React;
 $container = require_once __DIR__ . '/../../bootstrap.php';
 /** @var Nette\DI\Container $container */
 
-\Nette\Diagnostics\Debugger::$productionMode = FALSE;
+Nette\Diagnostics\Debugger::$productionMode = FALSE;
 $container->getByType('Nette\Http\IResponse')->setContentType('text/plain');
 
 /**
  * Server script for running react.
  * @author Stefan Fiedler
+ * @property mixed onConnection
  */
-class Server extends Nette\Object
+class Reactor extends Nette\Object
 {
-	/** @var Configuration */
-	private $conf;
+	/** @var Nette\DI\Container */
+	private $container;
 
+	/** @var Configuration */
+	private $configuration;
+
+	/** @var Options */
 	private $options;
 
 	private $clients = ['root' => FALSE];
-
-	/** @var Nette\DI\Container */
-	private $container;
 
 
 	public function __construct(Nette\DI\Container $container, $argv)
@@ -39,32 +41,13 @@ class Server extends Nette\Object
 			throw new \LogicException("Invalid number of arguments, expected 4");
 		}
 
-		$this->conf = new Configuration($container->parameters['tempDir']);
-
-		$path = $this->conf->tempPath . '/' . $argv[1];
-
-		$this->options = [
-			'name' => $argv[1],
-			'rootPwd' => $argv[3],
-			'config' => [
-				'pid' => getmypid(),
-				'port' => intval($argv[2]),
-				'error' => -1,
-				'status' => "EXPECTING_ROOT_INIT",
-				'clientCnt' => 0,
-				'path' => $path
-			],
-			'files' => [
-				'script' => $argv[0],
-				'config' => $path . '/' . $this->conf->files['config'],
-				'clients' => $path . '/' . $this->conf->files['clients']
-			]
-		];
-
-		umask();
-		file_put_contents($this->options['files']['config'], json_encode($this->options['config']));
-
 		$this->container = $container;
+		
+		$this->configuration = new Configuration($this->container->parameters['tempDir']);
+
+		$this->options = new Options($argv[1], $this->configuration);
+		$this->options->setup(getmypid(), intval($argv[2]), $argv[3]);
+		$this->options->write();
 	}
 
 
@@ -74,25 +57,25 @@ class Server extends Nette\Object
 
 		$socket = new React\Socket\Server($loop);
 		$socket->on('connection', $this->onConnection);
-		$socket->listen($this->options['config']['port']);
+		$socket->listen($this->options->port);
 
 		$loop->run();
 	}
 
 
-	public function onConnection(React\Socket\Connection $conn)
+	public function onConnection(React\Socket\Connection $connection)
 	{
-		$conn->write($this->options['name']);
+		$connection->write($this->options->name);
 
-		$client = new Client($conn);
+		$client = new ReactorClient($connection);
 
-		$conn->on('data', function ($data) use ($client) {
+		$connection->on('data', function ($data) use ($client) {
 			$this->onConnectionData($client, $data);
 		});
 	}
 
 
-	public function onConnectionData(Client $client, $data)
+	public function onConnectionData(ReactorClient $client, $data)
 	{
 		if (!$client->data['greet']) {
 			if (!$this->handleGreet($client, $data)) {
@@ -106,7 +89,7 @@ class Server extends Nette\Object
 			$response = $client->data['user'] === 'root' ? $this->handleRootData($client, $data) : $this->handleData($client, $data);
 
 			if ($response !== FALSE) {
-				$client->conn->write($response);
+				$client->connection->write($response);
 				echo "Request:\n$data\n\nResponse:\n$response\n\n\n";
 			} else {
 				echo "Request:\n$data\n\n\n";
@@ -120,15 +103,15 @@ class Server extends Nette\Object
 	}
 
 
-	private function handleGreet(Client $client, $data)
+	private function handleGreet(ReactorClient $client, $data)
 	{
-		if ($data === $this->options['rootPwd']) {
+		if ($data === $this->options->rootPassword) {
 			echo "Starting root connection\n\n\n";
-			$client->conn->write('root');
+			$client->connection->write('root');
 			$client->data['user'] = 'root';
 		} elseif ($this->options['config']['error'] === 0 && isset($this->clients[$data])) {
 			echo "Starting connection for user '$data'\n\n\n";
-			$client->conn->write($data);
+			$client->connection->write($data);
 			$client->data['user'] = $data;
 		} else {
 			return FALSE;
@@ -139,7 +122,7 @@ class Server extends Nette\Object
 	}
 
 
-	private function addClient(Client $client)
+	private function addClient(ReactorClient $client)
 	{
 		if (!isset($this->clients[$client->data['user']])) {
 			return FALSE;
@@ -153,7 +136,7 @@ class Server extends Nette\Object
 	}
 
 
-	private function disconnectClient(Client $client)
+	private function disconnectClient(ReactorClient $client)
 	{
 		if (isset($this->clients[$client->data['user']])) {
 			echo "Removing active connection for " . $client->data['user'] . ". User can reconnect later.\n\n\n";
@@ -166,12 +149,12 @@ class Server extends Nette\Object
 	}
 
 
-	private function closeConnection(Client $client)
+	private function closeConnection(ReactorClient $client)
 	{
 		echo "Closing connection for user " . ($client->data['user'] ?: 'unknown') . ".\n\n\n";
 
-		$client->conn->close();
-		unset($client->conn);
+		$client->connection->close();
+		unset($client->connection);
 		unset($client);
 
 		return TRUE;
@@ -184,7 +167,7 @@ class Server extends Nette\Object
 	}
 
 
-	private function handleRootData(Client $client, $data)
+	private function handleRootData(ReactorClient $client, $data)
 	{
 		if ($data === 'init') {
 			return 'init';
@@ -194,11 +177,11 @@ class Server extends Nette\Object
 	}
 
 
-	private function handleData(Client $client, $data)
+	private function handleData(ReactorClient $client, $data)
 	{
 		return FALSE;
 	}
 }
 
-$server = new Server($container, $_SERVER['argv']);
+$server = new Reactor($container, $_SERVER['argv']);
 $server->start();
