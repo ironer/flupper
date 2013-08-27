@@ -19,20 +19,20 @@ $container->getByType('Nette\Http\IResponse')->setContentType('text/plain');
 /**
  * Server script for running react.
  * @author Stefan Fiedler
- * @property mixed onConnection
+ * @property callable onConnection
  */
 class Reactor extends Nette\Object
 {
 	/** @var Nette\DI\Container */
 	private $container;
 
+	/** @var Environment */
+	private $environment;
+
 	/** @var Configuration */
-	private $configuration;
+	public $configuration;
 
-	/** @var Options */
-	private $options;
-
-	private $clients = ['root' => FALSE];
+	public $clients = ['root' => FALSE];
 
 
 	public function __construct(Nette\DI\Container $container, $argv)
@@ -43,11 +43,11 @@ class Reactor extends Nette\Object
 
 		$this->container = $container;
 		
-		$this->configuration = new Configuration($this->container->parameters['tempDir']);
+		$this->environment = new Environment($this->container->parameters['tempDir']);
 
-		$this->options = new Options($argv[1], $this->configuration);
-		$this->options->setup(getmypid(), intval($argv[2]), $argv[3]);
-		$this->options->write();
+		$this->configuration = new Configuration($argv[1], getmypid(), intval($argv[2]), $argv[3]);
+
+		$this->environment->writeReactorConfiguration($this->configuration);
 	}
 
 
@@ -57,7 +57,7 @@ class Reactor extends Nette\Object
 
 		$socket = new React\Socket\Server($loop);
 		$socket->on('connection', $this->onConnection);
-		$socket->listen($this->options->port);
+		$socket->listen($this->configuration->port);
 
 		$loop->run();
 	}
@@ -65,7 +65,7 @@ class Reactor extends Nette\Object
 
 	public function onConnection(React\Socket\Connection $connection)
 	{
-		$connection->write($this->options->name);
+		$connection->write($this->configuration->name);
 
 		$client = new ReactorClient($connection);
 
@@ -105,11 +105,11 @@ class Reactor extends Nette\Object
 
 	private function handleGreet(ReactorClient $client, $data)
 	{
-		if ($data === $this->options->rootPassword) {
+		if ($data === $this->configuration->rootPassword) {
 			echo "Starting root connection\n\n\n";
 			$client->connection->write('root');
 			$client->data['user'] = 'root';
-		} elseif ($this->options['config']['error'] === 0 && isset($this->clients[$data])) {
+		} elseif ($this->configuration->error === 0 && isset($this->clients[$data])) {
 			echo "Starting connection for user '$data'\n\n\n";
 			$client->connection->write($data);
 			$client->data['user'] = $data;
@@ -163,7 +163,7 @@ class Reactor extends Nette\Object
 
 	private function authorizeAccess($user)
 	{
-		return $user === 'root' || ($this->options['config']['error'] === 0 && isset($this->clients[$user]));
+		return $user === 'root' || ($this->configuration->error === 0 && isset($this->clients[$user]));
 	}
 
 

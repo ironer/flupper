@@ -23,7 +23,7 @@ class HomepagePresenter extends BasePresenter
 
 	public function renderDefault()
 	{
-		dump($this->root->configuration);
+		dump($this->root->environment);
 		dump($this->root->reactors);
 		dump($this->root->usedPorts);
 	}

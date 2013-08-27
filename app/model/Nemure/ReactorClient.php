@@ -21,8 +21,15 @@ class ReactorClient extends Nette\Object
 
 	public $data = ['greet' => FALSE, 'close' => FALSE, 'user' => FALSE];
 
+
 	public function __construct(React\Socket\Connection $connection)
 	{
 		$this->connection = $connection;
+	}
+
+
+	public function __sleep()
+	{
+		return ['data'];
 	}
 }

@@ -8,8 +8,6 @@ namespace Nemure;
  */
 
 use Nette;
-
-use Nette\Utils\Finder;
 use Nette\Diagnostics\Debugger;
 
 /**
@@ -18,13 +16,13 @@ use Nette\Diagnostics\Debugger;
  */
 class Root extends Nette\Object
 {
-	/** @var Configuration */
-	public $configuration;
+	/** @var Environment */
+	public $environment;
 
-	/** @var array (reactorServerName => ['pid', 'port', 'error', 'status', 'clientCount', 'path']) of currently running reactors */
+	/** @var Configuration[] array (reactorName => Configuration) of currently running reactors */
 	public $reactors = [];
 
-	/** @var array (port => reactorServerName) used ports of running reactors */
+	/** @var array (port => reactorName) used ports of running reactors */
 	public $usedPorts = [];
 
 	/** @var string default name for reactor */
@@ -38,9 +36,9 @@ class Root extends Nette\Object
 	{
 		$time = microtime(TRUE);
 
-		$this->configuration = new Configuration($tempDir);
+		$this->environment = new Environment($tempDir);
 
-		list($this->reactors, $this->usedPorts) = $this->getReactorsData();
+		list($this->reactors, $this->usedPorts) = $this->environment->getReactorsConfigurations();
 
 		$this->reactorName = !empty($reactorName) ? $reactorName : 'Default';
 
@@ -62,13 +60,9 @@ class Root extends Nette\Object
 		if ($socket === FALSE) {
 			echo "Connecting to reactor failed<br>";
 		} else {
-			$reactorOptions = new Options($reactorName, $this->configuration);
-			if ($reactorOptions->read()) {
-				var_dump($reactorOptions);
-				$usedPorts[$reactorOptions->port] = $reactorOptions->name;
-			}
+			$configuration = $this->environment->readReactorConfiguration($reactorName);
 
-			if (!$this->greetReactor($reactorName, $socket)) {
+			if (!$this->greetReactor($configuration->name, $socket)) {
 				echo "Request for root communication failed<br>";
 			} elseif (!$this->initReactor($socket)) {
 				echo "Request for reactor initialization failed<br>";
@@ -76,7 +70,8 @@ class Root extends Nette\Object
 				echo "Reactor was initialized correctly and expects connections from clients<br>";
 			}
 
-			$this->reactors[$reactorName] = $reactorOptions;
+			$this->reactors[$configuration->name] = $configuration;
+			$this->usedPorts[$configuration->port] = $configuration->name;
 		}
 	}
 
@@ -86,17 +81,14 @@ class Root extends Nette\Object
 		if (empty($this->reactors[$reactorName])) {
 			return FALSE;
 		}
-		$reactor = $this->reactors[$reactorName];
 
-		if (isset($reactor['pid'], $reactor['path']) && posix_kill($reactor['pid'], 15)) {
+		$configuration = $this->reactors[$reactorName];
 
-			foreach (Finder::findFiles('*')->from($reactor['path'])->childFirst() as $path => $file) {
-				unlink($path);
-			}
+		if (posix_kill($configuration->pid, 15)) {
+			$this->environment->deleteReactorDirectory($reactorName);
 
-			rmdir($reactor['path']);
 			unset($this->reactors[$reactorName]);
-			unset($this->usedPorts[$reactor['port']]);
+			unset($this->usedPorts[$configuration->port]);
 
 			return TRUE;
 		}
@@ -117,10 +109,10 @@ class Root extends Nette\Object
 			$port = rand(1300, 1400);
 		} while (isset($this->usedPorts[$port]));
 
-		mkdir($temp = $this->configuration->tempPath . "/$reactorName", 0777);
+		mkdir($temp = $this->environment->tempPath . "/$reactorName", 0777);
 
-		$query = "php " . $this->configuration->nemurePath . "/Reactor.php $reactorName $port $this->rootPassword > $temp/"
-				. $this->configuration->files['log'] . " &";
+		$query = "php " . $this->environment->nemurePath . "/Reactor.php $reactorName $port $this->rootPassword > $temp/"
+				. $this->environment->logFile . " &";
 
 		echo "Starting reactor $reactorName on port $port<br>";
 		proc_close(proc_open($query, [], $pipes, $temp, []));
@@ -242,44 +234,5 @@ class Root extends Nette\Object
 		}
 
 		return [$response, 0];
-	}
-
-
-	private function getReactorsData()
-	{
-		$this->checkReactorTemp();
-
-		$reactors = [];
-		$usedPorts = [];
-
-		foreach (Finder::findDirectories('*')->in($this->configuration->tempPath) as $dir) {
-			/** @var \SplFileInfo $dir */
-			$reactorName = $dir->getFilename();
-
-			$reactorOptions = new Options($reactorName, $this->configuration);
-			if ($reactorOptions->read()) {
-				$usedPorts[$reactorOptions->port] = $reactorName;
-			}
-
-			$reactors[$reactorName] = $reactorOptions;
-		}
-
-		return [$reactors, $usedPorts];
-	}
-
-
-	private function checkReactorTemp()
-	{
-		if (!is_dir($reactorTemp = $this->configuration->tempPath)) {
-			if (is_dir($parentDir = dirname($reactorTemp)) && is_writable($parentDir)) {
-				mkdir($reactorTemp, 0777);
-			} else {
-				throw new \Exception("Attemtp to create subdirectory for reactor servers failed in TEMP ($parentDir).");
-			}
-		} elseif (!is_writable($reactorTemp)) {
-			throw new \Exception("TEMP directory for reactor servers ($reactorTemp) isn't writable.");
-		}
-
-		return TRUE;
 	}
 }
