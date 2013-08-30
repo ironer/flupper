@@ -11,7 +11,7 @@ use Nette;
 use React;
 
 /**
- * Class for storing clients' connections to react server.
+ * Class for storing clients' connections to reactor server.
  * @author Stefan Fiedler
  */
 class ReactorClient extends Nette\Object

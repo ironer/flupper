@@ -24,8 +24,9 @@ class HomepagePresenter extends BasePresenter
 	public function renderDefault()
 	{
 		dump($this->root->environment);
-		dump($this->root->reactors);
+		dump($this->root->configurations);
 		dump($this->root->usedPorts);
+		dump($this->root->reactors);
 	}
 
 
@@ -39,9 +40,9 @@ class HomepagePresenter extends BasePresenter
 
 	public function actionKillReactor()
 	{
-		if (!count($this->root->reactors)) {
+		if (!count($this->root->configurations)) {
 			echo "All reactor servers are already shut down<br>";
-		} elseif ($this->root->killReactor($reactorName = array_keys($this->root->reactors)[0])) {
+		} elseif ($this->root->killReactor($reactorName = array_keys($this->root->configurations)[0])) {
 			echo "$reactorName was shut down<br>";
 		} else {
 			echo "Shutting down of $reactorName failed<br>";

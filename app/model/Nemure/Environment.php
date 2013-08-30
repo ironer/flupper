@@ -79,23 +79,25 @@ class Environment extends Nette\Object
 	}
 
 
-	public function readReactorConfiguration($reactorName)
+	public function readReactorConfiguration($reactorName, $timeout = 0)
 	{
 		$configPath = "$this->tempPath/$reactorName/$this->configFile";
 
-		if (!is_file($configPath)) {
-			throw new \Exception("File '$configPath' with reactor's configuration wasn't found.");
-		} elseif (!is_writable($configPath)) {
-			throw new \Exception("File '$configPath' with reactor's configuration isn't writable.");
-		} else {
-			$configuration = unserialize(file_get_contents($configPath));
+		do {
+			if (is_file($configPath) && is_writable($configPath)) {
+				$configuration = unserialize(file_get_contents($configPath));
 
-			if (!$configuration instanceof Configuration) {
-				throw new \Exception("There is no valid configuration in the file '$configPath'.");
+				if ($configuration instanceof Configuration) {
+					return $configuration;
+				}
+
+				unset($configuration);
 			}
-		}
 
-		return $configuration;
+			usleep(10000);
+		} while (($timeout -= 10) > 0);
+
+		return FALSE;
 	}
 
 
@@ -108,29 +110,36 @@ class Environment extends Nette\Object
 	}
 
 
-	public function readReactorClients($reactorName)
+	public function readReactorClients($reactorName, $timeout)
 	{
 		$clientsPath = "$this->tempPath/$reactorName/$this->clientsFile";
 
-		if (!is_file($clientsPath)) {
-			throw new \Exception("File '$clientsPath' with reactor's clients wasn't found.");
-		} elseif (!is_writable($clientsPath)) {
-			throw new \Exception("File '$clientsPath' with reactor's clients isn't writable.");
-		} else {
-			$clients = unserialize(file_get_contents($clientsPath));
+		do {
+			if (is_file($clientsPath) && is_writable($clientsPath)) {
+				$clients = unserialize(file_get_contents($clientsPath));
+				$valid = TRUE;
 
-			if (!is_array($clients)) {
-				throw new \Exception("There is no array of clients in the file '$clientsPath'.");
-			}
-
-			foreach ($clients as $user => $client) {
-				if ($client !== FALSE && !$client instanceof ReactorClient) {
-					throw new \Exception("Invalid client data for user '$user' in file '$clientsPath'.");
+				if (is_array($clients)) {
+					foreach ($clients as $client) {
+						if ($client !== FALSE && !$client instanceof ReactorClient) {
+							$valid = FALSE;
+						}
+					}
+				} else {
+					$valid = FALSE;
 				}
-			}
-		}
 
-		return $clients;
+				if ($valid) {
+					return $clients;
+				}
+
+				unset($clients);
+			}
+
+			usleep(10000);
+		} while (($timeout -= 10) > 0);
+
+		return FALSE;
 	}
 
 

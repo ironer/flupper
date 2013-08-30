@@ -20,90 +20,80 @@ class Root extends Nette\Object
 	public $environment;
 
 	/** @var Configuration[] array (reactorName => Configuration) of currently running reactors */
-	public $reactors = [];
+	public $configurations = [];
 
 	/** @var array (port => reactorName) used ports of running reactors */
 	public $usedPorts = [];
 
+	/** @var RootClient[] array (reactorName => RootClient) of connected reactors */
+	public $reactors = [];
+
 	/** @var string default name for reactor */
-	public $reactorName;
+	public $defaultReactorName;
 
 	/** @var string password for root access to reactors */
 	public $rootPassword = 'secret';
 
 
-	public function __construct($tempDir, $reactorName)
+	public function __construct($tempDir, $defaultReactorName)
 	{
 		$time = microtime(TRUE);
 
 		$this->environment = new Environment($tempDir);
 
-		list($this->reactors, $this->usedPorts) = $this->environment->getReactorsConfigurations();
+		list($this->configurations, $this->usedPorts) = $this->environment->getReactorsConfigurations();
 
-		$this->reactorName = !empty($reactorName) ? $reactorName : 'Default';
+		$this->defaultReactorName = !empty($defaultReactorName) ? $defaultReactorName : 'Default';
 
-		echo "Reading of reactors' configurations (" . count($this->reactors) . ") took: "
+		echo "Reading of reactors' configurations (" . count($this->configurations) . ") took: "
 				. number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . ' ms<br>';
 	}
 
 
 	public function startReactor()
 	{
-		list($reactorName, $port) = $this->runReactor();
+		if (count($this->configurations) > 30) {
+			throw new \Exception('No more than 30 reactor servers allowed.');
+		}
 
 		$time = microtime(TRUE);
 
-		$socket = $this->connectReactor($port);
+		if (FALSE === $reactor = $this->createRootClient()) {
+			throw new \Exception('Starting of reactor server failed.');
+		}
 
-		echo "Connecting to reactor took: " . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . " ms<br>";
+		echo "Creating of reactor took: " . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . " ms<br>";
 
-		if ($socket === FALSE) {
+		$time = microtime(TRUE);
+
+		if (!$reactor->connect()) {
 			echo "Connecting to reactor failed<br>";
 		} else {
-			$configuration = $this->environment->readReactorConfiguration($reactorName);
+			echo "Connecting to reactor took: " . number_format(1000 * (microtime(TRUE) - $time), 2, '.', ' ') . " ms<br>";
 
-			if (!$this->greetReactor($configuration->name, $socket)) {
+			if (!$reactor->greet()) {
 				echo "Request for root communication failed<br>";
-			} elseif (!$this->initReactor($socket)) {
+			} elseif (!$reactor->init()) {
 				echo "Request for reactor initialization failed<br>";
 			} else {
 				echo "Reactor was initialized correctly and expects connections from clients<br>";
 			}
 
-			$this->reactors[$configuration->name] = $configuration;
-			$this->usedPorts[$configuration->port] = $configuration->name;
-		}
-	}
+			$this->configurations[$reactor->configuration->name] = $reactor->configuration;
+			$this->reactors[$reactor->configuration->name] = $reactor;
+			$this->usedPorts[$reactor->configuration->port] = $reactor->configuration->name;
 
-
-	public function killReactor($reactorName)
-	{
-		if (empty($this->reactors[$reactorName])) {
-			return FALSE;
-		}
-
-		$configuration = $this->reactors[$reactorName];
-
-		if (posix_kill($configuration->pid, 15)) {
-			$this->environment->deleteReactorDirectory($reactorName);
-
-			unset($this->reactors[$reactorName]);
-			unset($this->usedPorts[$configuration->port]);
-
-			return TRUE;
-		}
+			return $reactor;
+		};
 
 		return FALSE;
 	}
 
 
-	private function runReactor()
+	private function createRootClient()
 	{
-		if (count($this->reactors) > 30) {
-			throw new \Exception('No more than 30 reactor servers allowed.');
-		}
-		for ($reactorNumber = 1; isset($this->reactors[$reactorName = $this->reactorName . str_pad($reactorNumber, 3, '0', STR_PAD_LEFT)]); ) {
-			++$reactorNumber;
+		for ($i = 1; isset($this->configurations[$reactorName = $this->defaultReactorName . str_pad($i, 3, '0', STR_PAD_LEFT)]); ) {
+			++$i;
 		}
 		do {
 			$port = rand(1300, 1400);
@@ -117,122 +107,39 @@ class Root extends Nette\Object
 		echo "Starting reactor $reactorName on port $port<br>";
 		proc_close(proc_open($query, [], $pipes, $temp, []));
 
-		return [$reactorName, $port];
-	}
+		$configuration = $this->environment->readReactorConfiguration($reactorName, 5000);
 
-
-	private function connectReactor($port)
-	{
-		for ($timeout = 0, $step = 10; TRUE; $timeout += $step, $step *= 1.3) {
-
-			echo "Creating TCP socket => ";
-			if (FALSE !== $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)) {
-
-				echo "Setting timeout to 1 second => ";
-				if (socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, ['sec' => 1, 'usec' => 0])) {
-
-					echo "Connecting to port $port => ";
-					if (@socket_connect($socket, $_SERVER["HTTP_HOST"], $port)) {
-
-						echo "Connection successful<br>";
-						return $socket;
-					}
-				}
-			}
-
-			echo socket_strerror(socket_last_error()) . '<br>';
-			socket_close($socket);
-
-			if ($timeout > 2000) {
-				break;
-			}
-			usleep(1000 * $step);
+		if ($configuration instanceof Configuration) {
+			return new RootClient($configuration);
 		}
 
 		return FALSE;
 	}
 
 
-	private function greetReactor($reactorName, $socket)
+	public function killReactor($reactorName)
 	{
-		list($halo, $haloError) = $this->readData($socket);
-
-		if ($haloError !== 0) {
-			echo "Reading of reactor's identification failed: $haloError<br>";
-		} elseif ($halo === $reactorName) {
-			echo "$reactorName greets correctly => ";
-
-			if ($this->sendData($socket, $this->rootPassword) === strlen($this->rootPassword)) {
-				echo "Root password sent => ";
-			} else {
-				echo "Sending of root password failed<br>";
-				return FALSE;
-			}
-
-			list($confirm, $confirmError) = $this->readData($socket);
-			if ($confirmError !== 0) {
-				echo "Reading the confirmation of root access failed: $haloError<br>";
-			} elseif ($confirm !== 'root') {
-				echo "Wrong reply for confirmation of root access: '$confirm'<br>";
-			} else {
-				echo "Root access authorized<br>";
-				return TRUE;
-			}
-
+		if (empty($this->configurations[$reactorName])) {
 			return FALSE;
-		} else {
-			echo "Expecting reactor's name '$reactorName', but received '$halo'<br>";
+		}
+
+		if (isset($this->reactors[$reactorName]) && $this->reactors[$reactorName]->socket !== FALSE) {
+			socket_close($this->reactors[$reactorName]->socket);
+			$this->reactors[$reactorName]->socket = FALSE;
+			unset($this->reactors[$reactorName]);
+		}
+
+		$configuration = $this->configurations[$reactorName];
+
+		if (posix_kill($configuration->pid, 15)) {
+			$this->environment->deleteReactorDirectory($reactorName);
+
+			unset($this->configurations[$reactorName]);
+			unset($this->usedPorts[$configuration->port]);
+
+			return TRUE;
 		}
 
 		return FALSE;
-	}
-
-
-	private function initReactor($socket)
-	{
-		echo "Sending init request => ";
-
-		if ($this->sendData($socket, "init") !== 4) {
-			echo " Sending of init command failed<br>";
-		} else {
-			list($init, $initError) = $this->readData($socket);
-
-			if ($initError !== 0) {
-				echo "Attempt to read response failed: $initError<br>";
-			} elseif ($init !== 'init') {
-				echo "Wrong response: $init<br>";
-			} else {
-				echo "Initialization successful<br>";
-				return TRUE;
-			}
-		}
-
-		return FALSE;
-	}
-
-
-	private function sendData($socket, $data)
-	{
-		return socket_send($socket, $data, strlen($data), 0);
-	}
-
-
-	private function readData($socket)
-	{
-		$response = '';
-		$chunkSize = 1024;
-
-		while ($byteCnt = socket_recv($socket, $buf, $chunkSize, 0)) {
-			$response .= $buf;
-			if ($byteCnt < $chunkSize) {
-				break;
-			}
-		}
-
-		if ($byteCnt === FALSE) {
-			return [$response, socket_strerror(socket_last_error($socket))];
-		}
-
-		return [$response, 0];
 	}
 }
