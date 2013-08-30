@@ -141,7 +141,7 @@ class RootClient extends Nette\Object
 			return [$response, socket_strerror(socket_last_error($this->socket))];
 		}
 
-		return [$response, 0];
+		return [trim($response), 0];
 	}
 
 
