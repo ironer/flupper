@@ -101,7 +101,7 @@ class Root extends Nette\Object
 
 		mkdir($temp = $this->environment->tempPath . "/$reactorName", 0777);
 
-		$query = "php " . $this->environment->nemurePath . "/Reactor.php $reactorName $port $this->rootPassword > $temp/"
+		$query = "php " . $this->environment->nemurePath . "/ReactorRun.php $reactorName $port $this->rootPassword > $temp/"
 				. $this->environment->logFile . " &";
 
 		echo "Starting reactor $reactorName on port $port<br>";

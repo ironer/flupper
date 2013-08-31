@@ -22,6 +22,8 @@ class Environment extends Nette\Object
 	const CMD_REMOVE_CLIENT = 'remove'; // remove given SSID client (connection to client will be closed immediately)
 	const CMD_GET_CONFIGURATION = 'config'; // command for recieving serialized configuration of reactor server
 	const CMD_GET_CLIENTS = 'clients'; // get array of serialized reactor's clients
+	const EOL = "\r\n"; // line separator in message
+	const EOM = "\r\n\r\n"; // end of message
 
 	const STATUS_EXPECTING_ROOT_INIT = 'EXPECTING_ROOT_INIT';
 	const STATUS_ACCEPTING_CLIENT_CONNECTIONS = 'ACCEPTING_CLIENT_CONNECTIONS';

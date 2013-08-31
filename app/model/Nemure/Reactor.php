@@ -10,21 +10,13 @@ namespace Nemure;
 use Nette;
 use React;
 
-$container = require_once __DIR__ . '/../../bootstrap.php';
-/** @var Nette\DI\Container $container */
-
-Nette\Diagnostics\Debugger::$productionMode = FALSE;
-$container->getByType('Nette\Http\IResponse')->setContentType('text/plain');
-
 /**
- * Server script for running react.
+ * Reactor server class.
  * @author Stefan Fiedler
  * @property callable onConnection
  */
 class Reactor extends Nette\Object
 {
-	const EOM = "\r\n\r\n";
-
 	/** @var Nette\DI\Container */
 	private $container;
 
@@ -67,9 +59,9 @@ class Reactor extends Nette\Object
 
 	public function onConnection(React\Socket\Connection $connection)
 	{
-		$connection->write($this->configuration->name . self::EOM);
-
 		$client = new ReactorClient($connection);
+
+		$client->connection->write($this->configuration->name . Environment::EOM);
 
 		$connection->on('data', function ($data) use ($client) {
 			$this->onConnectionData($client, trim($data));
@@ -92,7 +84,7 @@ class Reactor extends Nette\Object
 			$response = $client->data['user'] === 'root' ? $this->handleRootData($client, $data) : $this->handleData($client, $data);
 
 			if ($response !== FALSE) {
-				$client->connection->write($response . self::EOM);
+				$client->connection->write($response . Environment::EOM);
 				echo "Request:\n$data\n\nResponse:\n$response\n\n\n";
 			} else {
 				echo "Request:\n$data\n\n\n";
@@ -110,11 +102,11 @@ class Reactor extends Nette\Object
 	{
 		if ($data === $this->configuration->rootPassword) {
 			echo "Valid greeting of 'root' accepted.\n\n\n";
-			$client->connection->write('root' . self::EOM);
+			$client->connection->write('root' . Environment::EOM);
 			$client->data['user'] = 'root';
 		} elseif ($this->configuration->error === 0 && isset($this->clients[$data])) {
 			echo "Valid greeting of user '$data' accepted.\n\n\n";
-			$client->connection->write($data . self::EOM);
+			$client->connection->write($data . Environment::EOM);
 			$client->data['user'] = $data;
 		} else {
 			echo "Invalid greeting user '$data' denied.\n\n\n";
@@ -197,6 +189,3 @@ class Reactor extends Nette\Object
 		return FALSE;
 	}
 }
-
-$server = new Reactor($container, $_SERVER['argv']);
-$server->start();
