@@ -22,11 +22,24 @@ class Environment extends Nette\Object
 	const CMD_REMOVE_CLIENT = 'remove'; // remove given SSID client (connection to client will be closed immediately)
 	const CMD_GET_CONFIGURATION = 'config'; // command for recieving serialized configuration of reactor server
 	const CMD_GET_CLIENTS = 'clients'; // get array of serialized reactor's clients
-	const EOL = "\r\n"; // line separator in message
-	const EOM = "\r\n\r\n"; // end of message
 
-	const STATUS_EXPECTING_ROOT_INIT = 'EXPECTING_ROOT_INIT';
-	const STATUS_ACCEPTING_CLIENT_CONNECTIONS = 'ACCEPTING_CLIENT_CONNECTIONS';
+	const MESSAGE_BOM = "@"; // start of message
+	const MESSAGE_EOL = "#"; // data parts separator in message
+	const MESSAGE_EOM = "$"; // end of message
+	const MESSAGE_ERR = "&"; // error in message (stop receiving)
+	const MESSAGE_MAX_COMMAND_LENGTH = 1000; // maximum length of valid command including arguments
+	const MESSAGE_MAX_DATA_LENGTH = 8000; // maximum length of base64 encoded JSON data in valid message
+	const MESSAGE_MAX_CHUNKS = 9; // maximum number of chunks (max. chunk lenght = 1kB) in message (1 for command and)
+
+	const MESSENGER_TYPE_REACTOR = 0; // messenger is using asynchronous reactor communication
+	const MESSENGER_TYPE_SOCKET = 1; // messenger is using blocked socket communication
+	const MESSENGER_READY = 0; // messenger is ready for sending or receiving message
+	const MESSENGER_SENDING = 1; // messenger is sending a message
+	const MESSENGER_RECEIVING = 2; // messenger is receiving a message
+	const MESSENGER_TIMEOUT_MS = 2000; // maximum timeout in miliseconds for sending or receiving one message
+
+	const REACTOR_EXPECTING_ROOT_INIT = 'EXPECTING_ROOT_INIT';
+	const REACTOR_ACCEPTING_CLIENT_CONNECTIONS = 'ACCEPTING_CLIENT_CONNECTIONS';
 
 
 	public $configFile = 'config.txt'; // default filename for storing reactor's configuration
@@ -163,5 +176,11 @@ class Environment extends Nette\Object
 		}
 
 		rmdir($dirPath);
+	}
+
+
+	public static function isValidCommand($command = FALSE)
+	{
+		return is_string($command) && strlen($command) <= self::MESSAGE_MAX_COMMAND_LENGTH && 0 === preg_match('#[^a-z0-9 ]#i', $command);
 	}
 }

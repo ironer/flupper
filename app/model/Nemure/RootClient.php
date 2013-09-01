@@ -124,7 +124,7 @@ class RootClient extends Nette\Object
 	private function readData()
 	{
 		if ($this->socket === FALSE) {
-			throw new \Exception("Root client has now active socket for communication.");
+			throw new \Exception("Root client has no active socket for communication.");
 		}
 
 		$response = '';
@@ -148,7 +148,7 @@ class RootClient extends Nette\Object
 	private function sendData($data)
 	{
 		if ($this->socket === FALSE) {
-			throw new \Exception("Root client has now active socket for communication.");
+			throw new \Exception("Root client has no active socket for communication.");
 		}
 
 		return socket_send($this->socket, $data, strlen($data), 0);

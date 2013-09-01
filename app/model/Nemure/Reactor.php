@@ -61,7 +61,7 @@ class Reactor extends Nette\Object
 	{
 		$client = new ReactorClient($connection);
 
-		$client->connection->write($this->configuration->name . Environment::EOM);
+		$client->connection->write($this->configuration->name);
 
 		$connection->on('data', function ($data) use ($client) {
 			$this->onConnectionData($client, trim($data));
@@ -71,7 +71,11 @@ class Reactor extends Nette\Object
 
 	public function onConnectionData(ReactorClient $client, $data)
 	{
-		if (!$client->data['greet']) {
+		if (FALSE === $message = $client->readMessage($data)) {
+			echo "Invalid request recieved from user '" . ($client->data['user'] ?: 'unknown') . "'.\n\n\n";
+			$this->closeConnection($client);
+			return FALSE;
+		} elseif (!$client->data['greet']) {
 			if (!$this->handleGreet($client, $data)) {
 				$this->closeConnection($client);
 				return FALSE;
@@ -84,7 +88,7 @@ class Reactor extends Nette\Object
 			$response = $client->data['user'] === 'root' ? $this->handleRootData($client, $data) : $this->handleData($client, $data);
 
 			if ($response !== FALSE) {
-				$client->connection->write($response . Environment::EOM);
+				$client->connection->write($response);
 				echo "Request:\n$data\n\nResponse:\n$response\n\n\n";
 			} else {
 				echo "Request:\n$data\n\n\n";
@@ -102,11 +106,11 @@ class Reactor extends Nette\Object
 	{
 		if ($data === $this->configuration->rootPassword) {
 			echo "Valid greeting of 'root' accepted.\n\n\n";
-			$client->connection->write('root' . Environment::EOM);
+			$client->connection->write('root');
 			$client->data['user'] = 'root';
 		} elseif ($this->configuration->error === 0 && isset($this->clients[$data])) {
 			echo "Valid greeting of user '$data' accepted.\n\n\n";
-			$client->connection->write($data . Environment::EOM);
+			$client->connection->write($data);
 			$client->data['user'] = $data;
 		} else {
 			echo "Invalid greeting user '$data' denied.\n\n\n";
@@ -175,7 +179,7 @@ class Reactor extends Nette\Object
 	{
 		if ($data === 'init' && $this->configuration->error === -1) {
 			$this->configuration->error = 0;
-			$this->configuration->status = Environment::STATUS_ACCEPTING_CLIENT_CONNECTIONS;
+			$this->configuration->status = Environment::REACTOR_ACCEPTING_CLIENT_CONNECTIONS;
 			$this->environment->writeReactorConfiguration($this->configuration);
 			return 'init';
 		}

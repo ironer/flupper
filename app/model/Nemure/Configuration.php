@@ -31,7 +31,7 @@ class Configuration extends Nette\Object
 	public $error = -1;
 
 	/** @var string status message */
-	public $status = Environment::STATUS_EXPECTING_ROOT_INIT;
+	public $status = Environment::REACTOR_EXPECTING_ROOT_INIT;
 
 	/** @var int number of clients added to the reactor except root */
 	public $clientCount = 0;
