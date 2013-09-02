@@ -27,6 +27,7 @@ class Environment extends Nette\Object
 	const MESSAGE_EOL = "#"; // data parts separator character in message
 	const MESSAGE_EOM = "$"; // end of message character
 	const MESSAGE_ERR = "&"; // error in message (stop receiving) character
+	const MESSAGE_CHUNK_ALTERNATE_CONFIRMATION = "ok"; // alternate confirmation of received chunk
 	const MESSAGE_MAX_CHUNKS = 9; // maximum number of chunks (max. chunk lenght incl. control chars) in message (1 for command and)
 	const MESSAGE_MAX_CHUNK_SIZE = 1024; // maximum byte size of one chunk including control chararacters
 	const MESSAGE_MAX_DATA_IN_CHUNK = 1000; // maximum number of data bytes in one chunk

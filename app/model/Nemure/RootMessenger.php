@@ -138,7 +138,7 @@ class RootMessenger extends Messenger
 	private function socketWriteChunk($chunk)
 	{
 		if ($this->socketWrite($chunk) && $this->socketRead($confirmedBytes)) {
-			return strlen($chunk) === (int) $confirmedBytes;
+			return $confirmedBytes === Environment::MESSAGE_CHUNK_ALTERNATE_CONFIRMATION || strlen($chunk) === (int) $confirmedBytes;
 		}
 		return FALSE;
 	}
@@ -179,12 +179,14 @@ class RootMessenger extends Messenger
 		while ($bufferedBytes = @socket_recv($this->socket, $buffer, Environment::MESSAGE_MAX_CHUNK_SIZE, 0)) {
 			$received .= $buffer;
 
-			if (($receivedBytes = strlen($received)) > Environment::MESSAGE_MAX_CHUNK_SIZE) {
+			if (strlen($received) > Environment::MESSAGE_MAX_CHUNK_SIZE) {
 				return FALSE;
 			}
 		}
 
-		if ($bufferedBytes !== FALSE && $receivedBytes) {
+		$received = trim($received);
+
+		if ($bufferedBytes !== FALSE && strlen($received)) {
 			$data = $received;
 			return TRUE;
 		}

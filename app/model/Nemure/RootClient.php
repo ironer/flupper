@@ -11,7 +11,7 @@ use Nette;
 use React;
 
 /**
- * Class for handling TCP connection to react server and storing asociated data.
+ * Class for handling TCP connection to reactor server and storing asociated data.
  * @author Stefan Fiedler
  */
 class RootClient extends Nette\Object
