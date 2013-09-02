@@ -27,9 +27,10 @@ class Environment extends Nette\Object
 	const MESSAGE_EOL = "#"; // data parts separator in message
 	const MESSAGE_EOM = "$"; // end of message
 	const MESSAGE_ERR = "&"; // error in message (stop receiving)
-	const MESSAGE_MAX_COMMAND_LENGTH = 1000; // maximum length of valid command including arguments
-	const MESSAGE_MAX_DATA_LENGTH = 8000; // maximum length of base64 encoded JSON data in valid message
-	const MESSAGE_MAX_CHUNKS = 9; // maximum number of chunks (max. chunk lenght = 1kB) in message (1 for command and)
+	const MESSAGE_MAX_CHUNKS = 9; // maximum number of chunks (max. chunk lenght incl. control chars) in message (1 for command and)
+	const MESSAGE_MAX_CHUNK_SIZE = 1024; // maximum byte size of one chunk including control chararacters
+	const MESSAGE_MAX_DATA_IN_CHUNK = 1000; // maximum number of data bytes in one chunk
+	public static $messageMaxDataSize; // maximum bytes of all encoded data in one message
 
 	const MESSENGER_TYPE_REACTOR = 0; // messenger is using asynchronous reactor communication
 	const MESSENGER_TYPE_SOCKET = 1; // messenger is using blocked socket communication
@@ -54,6 +55,7 @@ class Environment extends Nette\Object
 	public function __construct($tempDir)
 	{
 		$this->tempPath = realpath($tempDir) . '/reactors';
+		self::$messageMaxDataSize = self::MESSAGE_MAX_DATA_IN_CHUNK * (self::MESSAGE_MAX_CHUNKS - 1);
 	}
 
 
@@ -181,6 +183,6 @@ class Environment extends Nette\Object
 
 	public static function isValidCommand($command = FALSE)
 	{
-		return is_string($command) && strlen($command) <= self::MESSAGE_MAX_COMMAND_LENGTH && 0 === preg_match('#[^a-z0-9 ]#i', $command);
+		return is_string($command) && strlen($command) <= self::MESSAGE_MAX_DATA_IN_CHUNK && 0 === preg_match('#[^a-z0-9 ]#i', $command);
 	}
 }

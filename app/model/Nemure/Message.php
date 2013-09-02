@@ -32,8 +32,8 @@ class Message extends Nette\Object
 	{
 		$command = (string) $command;
 
-		if (($length = strlen($command)) > Environment::MESSAGE_MAX_COMMAND_LENGTH) {
-			throw new \Exception("Invalid command length (max. " . Environment::MESSAGE_MAX_COMMAND_LENGTH . "): $length.");
+		if (($length = strlen($command)) > Environment::MESSAGE_MAX_DATA_IN_CHUNK) {
+			throw new \Exception("Invalid command length (max. " . Environment::MESSAGE_MAX_DATA_IN_CHUNK . "): $length.");
 		}
 
 		if (0 !== preg_match('#[^a-z0-9 ]#i', $command)) {
@@ -63,11 +63,11 @@ class Message extends Nette\Object
 		if ($this->data !== FALSE) {
 			$encoded = base64_encode(json_encode($this->data));
 
-			if (($length = strlen($encoded)) > Environment::MESSAGE_MAX_DATA_LENGTH) {
-				throw new \Exception("Invalid encoded data length (max. " . Environment::MESSAGE_MAX_DATA_LENGTH . "): $length.");
+			if (($length = strlen($encoded)) > Environment::$messageMaxDataSize) {
+				throw new \Exception("Invalid encoded data length (max. " . Environment::$messageMaxDataSize	. "): $length.");
 			}
 
-			$this->chunks += str_split($encoded, 1023);
+			$this->chunks += str_split($encoded, Environment::MESSAGE_MAX_DATA_IN_CHUNK);
 		}
 
 		return $this;
@@ -97,7 +97,7 @@ class Message extends Nette\Object
 	}
 
 
-	public function getFirstChunk()
+	public function shiftFirstChunk()
 	{
 		return array_shift($this->chunks);
 	}
@@ -109,7 +109,7 @@ class Message extends Nette\Object
 			return FALSE;
 		}
 
-		$this->command = $this->getFirstChunk();
+		$this->command = $this->shiftFirstChunk();
 
 		if (count($this->chunks)) {
 			try {
