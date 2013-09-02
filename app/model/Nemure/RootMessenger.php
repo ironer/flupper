@@ -30,6 +30,13 @@ class RootMessenger extends Messenger
 	}
 
 
+	public function __destruct()
+	{
+		unset($this->message);
+		unset($this->socket);
+	}
+
+
 	public function send($command, $data = FALSE)
 	{
 		if (!Environment::isValidCommand($command)) {
@@ -77,23 +84,39 @@ class RootMessenger extends Messenger
 			$this->stop();
 		}
 
-		$this->message = new Message;
+		$this->status = Environment::MESSENGER_RECEIVING;
+		$success = FALSE;
 
-		if ($this->socketReadChunk($chunk)) {
-			if ($chunk[0] !== Environment::MESSAGE_BOM) {
-				return FALSE;
-			}
-
-			$chunk = sub
+		while ($this->socketReadChunk($chunk)) {
 			if ($chunk[0] === Environment::MESSAGE_BOM) {
-				if (isset($this->message)) {
-					unset($this->message);
-				}
-				$this->message = new Message;
+				$this->resetMessage();
+				$chunk = substr($chunk, 1);
+			} elseif (!$this->message->allowAddChunk()) {
+				break;
 			}
+
+			$endChar = substr($chunk, -1);
+
+			if ($endChar === Environment::MESSAGE_EOL) {
+				$this->message->addChunk(substr($chunk, 0, -1));
+				continue;
+			} elseif ($endChar === Environment::MESSAGE_EOM) {
+				$this->message->addChunk(substr($chunk, 0, -1));
+				$success = TRUE;
+			}
+
+			break;
 		}
 
+		if ($success && $success = $this->message->decompile()) {
+			$command = $this->message->getCommand();
+			$data = $this->message->getData();
+		}
 
+		unset($this->message);
+		$this->status = Environment::MESSENGER_READY;
+
+		return $success;
 	}
 
 

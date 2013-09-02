@@ -154,7 +154,6 @@ class Reactor extends Nette\Object
 		echo "Closing connection for user '" . ($client->data['user'] ?: 'unknown') . "'.\n\n\n";
 
 		$client->connection->close();
-		unset($client->connection);
 		unset($client);
 
 		return TRUE;

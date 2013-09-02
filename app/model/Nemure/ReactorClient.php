@@ -29,6 +29,17 @@ class ReactorClient extends Nette\Object
 	}
 
 
+	public function __sleep()
+	{
+		return ['data'];
+	}
+
+
+	public function __destruct()
+	{
+		unset($this->connection);
+	}
+
 	public function readMessage($message)
 	{
 		$message = trim($message);
@@ -67,11 +78,5 @@ class ReactorClient extends Nette\Object
 		$message = implode(Environment::EOL, $data) . Environment::EOM;
 
 		return $this->connection->write($message);
-	}
-
-
-	public function __sleep()
-	{
-		return ['data'];
 	}
 }

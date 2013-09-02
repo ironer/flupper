@@ -30,6 +30,21 @@ abstract class Messenger extends Nette\Object
 	}
 
 
+	public function resetMessage()
+	{
+		$reseted = FALSE;
+
+		if (isset($this->message)) {
+			unset($this->message);
+			$reseted = TRUE;
+		}
+
+		$this->message = new Message;
+
+		return $reseted;
+	}
+
+
 	abstract public function send($command, $data = FALSE);
 
 	abstract public function receive(&$command, &$data);
