@@ -39,25 +39,14 @@ class RootMessenger extends Messenger
 
 	public function send($command, $data = FALSE)
 	{
-		if (!Environment::isValidCommand($command)) {
-			return FALSE;
-		}
-		if ($this->status !== Environment::MESSENGER_READY) {
-			$this->stop();
-		}
-
-		$this->message = new Message;
-
-		try {
-			$chunkCount = $this->message->setCommand($command)->setData($data)->compile()->chunkCount();
-		} catch (\Exception $e) {
+		if (!$this->prepareMessage($command, $data)) {
 			return FALSE;
 		}
 
 		$this->status = Environment::MESSENGER_SENDING;
 		$success = FALSE;
 
-		if ($chunkCount === 1) {
+		if ($this->message->chunkCount() === 1) {
 			$chunk = Environment::MESSAGE_BOM . $this->message->shiftFirstChunk() . Environment::MESSAGE_EOM;
 			$success = $this->socketWriteChunk($chunk);
 		} else {

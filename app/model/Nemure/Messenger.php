@@ -30,7 +30,7 @@ abstract class Messenger extends Nette\Object
 	}
 
 
-	public function resetMessage()
+	protected function resetMessage()
 	{
 		$reseted = FALSE;
 
@@ -45,7 +45,29 @@ abstract class Messenger extends Nette\Object
 	}
 
 
+	protected function prepareMessage($command, $data = FALSE)
+	{
+		if (!Environment::isValidCommand($command)) {
+			return FALSE;
+		}
+		if ($this->status !== Environment::MESSENGER_READY) {
+			$this->stop();
+		}
+
+		$this->message = new Message;
+
+		try {
+			$this->message->setCommand($command)->setData($data)->compile();
+			return TRUE;
+		} catch (\Exception $e) {
+			return FALSE;
+		}
+	}
+
+
 	abstract public function send($command, $data = FALSE);
 
 	abstract public function receive(&$command, &$data);
+
+	abstract protected function stop();
 }
