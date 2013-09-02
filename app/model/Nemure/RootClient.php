@@ -19,14 +19,25 @@ class RootClient extends Nette\Object
 	/** @var Configuration */
 	public $configuration;
 
+	/** @var RootMessenger */
+	public $messenger;
+
 	public $clients = ['root' => FALSE];
 
 	/** @var resource */
 	public $socket = FALSE;
 
 
-	public function __construct(Configuration $configuration) {
+	public function __construct(Configuration $configuration)
+	{
 		$this->configuration = $configuration;
+	}
+
+
+	public function __destruct()
+	{
+		unset($this->messenger);
+		unset($this->socket);
 	}
 
 
@@ -43,8 +54,9 @@ class RootClient extends Nette\Object
 					echo "Connecting to port " . $this->configuration->port . " => ";
 					if (@socket_connect($socket, $_SERVER["HTTP_HOST"], $this->configuration->port)) {
 
-						echo "Connection successful<br>";
+						echo "Connection successful (creating RootMessenger)<br>";
 						$this->socket = $socket;
+						$this->messenger = new RootMessenger($socket);
 						return TRUE;
 					}
 				}
@@ -65,92 +77,56 @@ class RootClient extends Nette\Object
 
 	public function greet()
 	{
-		list($halo, $haloError) = $this->readData();
-
-		if ($haloError !== 0) {
-			echo "Reading of reactor's identification failed: $haloError<br>";
-		} elseif ($halo === $this->configuration->name) {
-			echo "$halo greets correctly => ";
-
-			if ($this->sendData($this->configuration->rootPassword) === strlen($this->configuration->rootPassword)) {
-				echo "Root password sent => ";
-			} else {
-				echo "Sending of root password failed<br>";
-				return FALSE;
-			}
-
-			list($confirm, $confirmError) = $this->readData();
-			if ($confirmError !== 0) {
-				echo "Reading the confirmation of root access failed: $haloError<br>";
-			} elseif ($confirm !== 'root') {
-				echo "Wrong reply for confirmation of root access: '$confirm'<br>";
-			} else {
-				echo "Root access authorized<br>";
-				return TRUE;
-			}
-
+		if (!$this->messenger->receive($command, $data)) {
+			echo "Reading of reactor's identification failed<br>";
+			return FALSE;
+		} elseif ($command !== $this->configuration->name) {
+			echo "Expecting reactor's name '" . $this->configuration->name . "', but received '$command'<br>";
 			return FALSE;
 		} else {
-			echo "Expecting reactor's name '" . $this->configuration->name . "', but received '$halo'<br>";
+			echo "$command greets correctly => ";
 		}
 
-		return FALSE;
+		if (!$this->messenger->send($this->configuration->rootPassword)) {
+			echo "Sending of root password failed<br>";
+			return FALSE;
+		} else {
+			echo "Root password sent => ";
+		}
+
+		if (!$this->messenger->receive($command, $data)) {
+			echo "Reading the confirmation of root access failed<br>";
+			return FALSE;
+		} elseif ($command !== $this->configuration->rootPassword) {
+			echo "Expecting root password confirmation '" . $this->configuration->rootPassword . "', but received '$command'<br>";
+			return FALSE;
+		} else {
+			echo "Root access authorized<br>";
+		}
+
+		return TRUE;
 	}
 
 
 	public function init()
 	{
-		echo "Sending init request => ";
-
-		if ($this->sendData("init") !== 4) {
-			echo " Sending of init command failed<br>";
+		if (!$this->messenger->send(Environment::CMD_INIT)) {
+			echo "Sending of init request failed<br>";
+			return FALSE;
 		} else {
-			list($init, $initError) = $this->readData();
-
-			if ($initError !== 0) {
-				echo "Attempt to read response failed: $initError<br>";
-			} elseif ($init !== 'init') {
-				echo "Wrong response: $init<br>";
-			} else {
-				echo "Initialization successful<br>";
-				return TRUE;
-			}
+			echo "Init request sent => ";
 		}
 
-		return FALSE;
-	}
-
-
-	private function readData()
-	{
-		if ($this->socket === FALSE) {
-			throw new \Exception("Root client has no active socket for communication.");
+		if (!$this->messenger->receive($command, $data)) {
+			echo "Reading the confirmation of init request failed<br>";
+			return FALSE;
+		} elseif ($command !== Environment::CMD_INIT) {
+			echo "Expecting init request confirmation '" . Environment::CMD_INIT . "', but received '$command'<br>";
+			return FALSE;
+		} else {
+			echo "Initialization successful<br>";
 		}
 
-		$response = '';
-		$chunkSize = 1024;
-
-		while ($byteCnt = socket_recv($this->socket, $buf, $chunkSize, 0)) {
-			$response .= $buf;
-			if ($byteCnt < $chunkSize) {
-				break;
-			}
-		}
-
-		if ($byteCnt === FALSE) {
-			return [$response, socket_strerror(socket_last_error($this->socket))];
-		}
-
-		return [trim($response), 0];
-	}
-
-
-	private function sendData($data)
-	{
-		if ($this->socket === FALSE) {
-			throw new \Exception("Root client has no active socket for communication.");
-		}
-
-		return socket_send($this->socket, $data, strlen($data), 0);
+		return TRUE;
 	}
 }
