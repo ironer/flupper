@@ -97,8 +97,8 @@ class RootClient extends Nette\Object
 		if (!$this->messenger->receive($command, $data)) {
 			echo "Reading the confirmation of root access failed<br>";
 			return FALSE;
-		} elseif ($command !== $this->configuration->rootPassword) {
-			echo "Expecting root password confirmation '" . $this->configuration->rootPassword . "', but received '$command'<br>";
+		} elseif ($command !== $hash = sha1($this->configuration->rootPassword)) {
+			echo "Expecting root password confirmation '" . $hash . "', but received '$command'<br>";
 			return FALSE;
 		} else {
 			echo "Root access authorized<br>";
